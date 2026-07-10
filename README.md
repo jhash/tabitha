@@ -100,9 +100,11 @@ tabitha serve                       # run the web server
 tabitha migrate up|down             # apply/revert tabitha's + River's schema
 tabitha jobs enqueue toc-sync       # queue a table-of-contents sync
 tabitha jobs work                   # process queued jobs once, then exit
+tabitha promote <email>             # grant an existing user the superadmin role
 ```
 
-Superadmin promotion (once auth is wired up): see `docs/promote-admin.md`.
+Superadmin promotion, including `docker exec` usage: see
+[`docs/promote-admin.md`](docs/promote-admin.md).
 
 ## Regenerating the query layer
 

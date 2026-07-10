@@ -45,9 +45,33 @@ func run(args []string) error {
 		return runMigrate(cfg, args[1:])
 	case "jobs":
 		return runJobs(cfg, args[1:])
+	case "promote":
+		return runPromote(cfg, args[1:])
 	default:
-		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs, promote)", cmd)
 	}
+}
+
+// runPromote grants an existing user the superadmin role — see
+// docs/promote-admin.md for direct and `docker exec` usage.
+func runPromote(cfg config.Config, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: tabitha promote <email>")
+	}
+	email := args[0]
+
+	return withPool(cfg, func(ctx context.Context, pool *pgxpool.Pool) error {
+		q := db.New(pool)
+		rows, err := q.PromoteToSuperadmin(ctx, email)
+		if err != nil {
+			return fmt.Errorf("promoting %s: %w", email, err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("no user found with email %s (they must log in at least once before they can be promoted)", email)
+		}
+		log.Printf("tabitha: promoted %s to superadmin", email)
+		return nil
+	})
 }
 
 func runMigrate(cfg config.Config, args []string) error {
