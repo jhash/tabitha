@@ -154,18 +154,42 @@ func (q *Queries) ListSongsByAddedBy(ctx context.Context) ([]ListSongsByAddedByR
 }
 
 const listSongsByArtist = `-- name: ListSongsByArtist :many
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs ORDER BY lower(artist) ASC, lower(title) ASC
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.artist) ASC, lower(songs.title) ASC
 `
 
-func (q *Queries) ListSongsByArtist(ctx context.Context) ([]Song, error) {
+type ListSongsByArtistRow struct {
+	ID               int64              `json:"id"`
+	Title            string             `json:"title"`
+	Artist           string             `json:"artist"`
+	Genre            string             `json:"genre"`
+	FilmShowAlbum    string             `json:"film_show_album"`
+	Decade           string             `json:"decade"`
+	BobTag           string             `json:"bob_tag"`
+	Status           string             `json:"status"`
+	SourceUrl        string             `json:"source_url"`
+	Notes            string             `json:"notes"`
+	TransposeHint    string             `json:"transpose_hint"`
+	GoogleDocID      string             `json:"google_doc_id"`
+	CurrentVersionID *int64             `json:"current_version_id"`
+	AddedByUserID    *int64             `json:"added_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	AddedByName      *string            `json:"added_by_name"`
+	AddedByEmail     *string            `json:"added_by_email"`
+}
+
+func (q *Queries) ListSongsByArtist(ctx context.Context) ([]ListSongsByArtistRow, error) {
 	rows, err := q.db.Query(ctx, listSongsByArtist)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Song
+	var items []ListSongsByArtistRow
 	for rows.Next() {
-		var i Song
+		var i ListSongsByArtistRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
@@ -183,6 +207,8 @@ func (q *Queries) ListSongsByArtist(ctx context.Context) ([]Song, error) {
 			&i.AddedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AddedByName,
+			&i.AddedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -195,18 +221,42 @@ func (q *Queries) ListSongsByArtist(ctx context.Context) ([]Song, error) {
 }
 
 const listSongsByLastUpdated = `-- name: ListSongsByLastUpdated :many
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs ORDER BY updated_at DESC
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY songs.updated_at DESC
 `
 
-func (q *Queries) ListSongsByLastUpdated(ctx context.Context) ([]Song, error) {
+type ListSongsByLastUpdatedRow struct {
+	ID               int64              `json:"id"`
+	Title            string             `json:"title"`
+	Artist           string             `json:"artist"`
+	Genre            string             `json:"genre"`
+	FilmShowAlbum    string             `json:"film_show_album"`
+	Decade           string             `json:"decade"`
+	BobTag           string             `json:"bob_tag"`
+	Status           string             `json:"status"`
+	SourceUrl        string             `json:"source_url"`
+	Notes            string             `json:"notes"`
+	TransposeHint    string             `json:"transpose_hint"`
+	GoogleDocID      string             `json:"google_doc_id"`
+	CurrentVersionID *int64             `json:"current_version_id"`
+	AddedByUserID    *int64             `json:"added_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	AddedByName      *string            `json:"added_by_name"`
+	AddedByEmail     *string            `json:"added_by_email"`
+}
+
+func (q *Queries) ListSongsByLastUpdated(ctx context.Context) ([]ListSongsByLastUpdatedRow, error) {
 	rows, err := q.db.Query(ctx, listSongsByLastUpdated)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Song
+	var items []ListSongsByLastUpdatedRow
 	for rows.Next() {
-		var i Song
+		var i ListSongsByLastUpdatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
@@ -224,6 +274,8 @@ func (q *Queries) ListSongsByLastUpdated(ctx context.Context) ([]Song, error) {
 			&i.AddedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AddedByName,
+			&i.AddedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -236,18 +288,42 @@ func (q *Queries) ListSongsByLastUpdated(ctx context.Context) ([]Song, error) {
 }
 
 const listSongsByRecentlyAdded = `-- name: ListSongsByRecentlyAdded :many
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs ORDER BY created_at DESC
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY songs.created_at DESC
 `
 
-func (q *Queries) ListSongsByRecentlyAdded(ctx context.Context) ([]Song, error) {
+type ListSongsByRecentlyAddedRow struct {
+	ID               int64              `json:"id"`
+	Title            string             `json:"title"`
+	Artist           string             `json:"artist"`
+	Genre            string             `json:"genre"`
+	FilmShowAlbum    string             `json:"film_show_album"`
+	Decade           string             `json:"decade"`
+	BobTag           string             `json:"bob_tag"`
+	Status           string             `json:"status"`
+	SourceUrl        string             `json:"source_url"`
+	Notes            string             `json:"notes"`
+	TransposeHint    string             `json:"transpose_hint"`
+	GoogleDocID      string             `json:"google_doc_id"`
+	CurrentVersionID *int64             `json:"current_version_id"`
+	AddedByUserID    *int64             `json:"added_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	AddedByName      *string            `json:"added_by_name"`
+	AddedByEmail     *string            `json:"added_by_email"`
+}
+
+func (q *Queries) ListSongsByRecentlyAdded(ctx context.Context) ([]ListSongsByRecentlyAddedRow, error) {
 	rows, err := q.db.Query(ctx, listSongsByRecentlyAdded)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Song
+	var items []ListSongsByRecentlyAddedRow
 	for rows.Next() {
-		var i Song
+		var i ListSongsByRecentlyAddedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
@@ -265,6 +341,8 @@ func (q *Queries) ListSongsByRecentlyAdded(ctx context.Context) ([]Song, error) 
 			&i.AddedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AddedByName,
+			&i.AddedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -277,18 +355,42 @@ func (q *Queries) ListSongsByRecentlyAdded(ctx context.Context) ([]Song, error) 
 }
 
 const listSongsByStatus = `-- name: ListSongsByStatus :many
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs ORDER BY lower(status) ASC, lower(title) ASC
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.status) ASC, lower(songs.title) ASC
 `
 
-func (q *Queries) ListSongsByStatus(ctx context.Context) ([]Song, error) {
+type ListSongsByStatusRow struct {
+	ID               int64              `json:"id"`
+	Title            string             `json:"title"`
+	Artist           string             `json:"artist"`
+	Genre            string             `json:"genre"`
+	FilmShowAlbum    string             `json:"film_show_album"`
+	Decade           string             `json:"decade"`
+	BobTag           string             `json:"bob_tag"`
+	Status           string             `json:"status"`
+	SourceUrl        string             `json:"source_url"`
+	Notes            string             `json:"notes"`
+	TransposeHint    string             `json:"transpose_hint"`
+	GoogleDocID      string             `json:"google_doc_id"`
+	CurrentVersionID *int64             `json:"current_version_id"`
+	AddedByUserID    *int64             `json:"added_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	AddedByName      *string            `json:"added_by_name"`
+	AddedByEmail     *string            `json:"added_by_email"`
+}
+
+func (q *Queries) ListSongsByStatus(ctx context.Context) ([]ListSongsByStatusRow, error) {
 	rows, err := q.db.Query(ctx, listSongsByStatus)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Song
+	var items []ListSongsByStatusRow
 	for rows.Next() {
-		var i Song
+		var i ListSongsByStatusRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
@@ -306,6 +408,8 @@ func (q *Queries) ListSongsByStatus(ctx context.Context) ([]Song, error) {
 			&i.AddedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AddedByName,
+			&i.AddedByEmail,
 		); err != nil {
 			return nil, err
 		}
@@ -318,18 +422,48 @@ func (q *Queries) ListSongsByStatus(ctx context.Context) ([]Song, error) {
 }
 
 const listSongsByTitle = `-- name: ListSongsByTitle :many
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs ORDER BY lower(title) ASC, lower(artist) ASC
+
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.title) ASC, lower(songs.artist) ASC
 `
 
-func (q *Queries) ListSongsByTitle(ctx context.Context) ([]Song, error) {
+type ListSongsByTitleRow struct {
+	ID               int64              `json:"id"`
+	Title            string             `json:"title"`
+	Artist           string             `json:"artist"`
+	Genre            string             `json:"genre"`
+	FilmShowAlbum    string             `json:"film_show_album"`
+	Decade           string             `json:"decade"`
+	BobTag           string             `json:"bob_tag"`
+	Status           string             `json:"status"`
+	SourceUrl        string             `json:"source_url"`
+	Notes            string             `json:"notes"`
+	TransposeHint    string             `json:"transpose_hint"`
+	GoogleDocID      string             `json:"google_doc_id"`
+	CurrentVersionID *int64             `json:"current_version_id"`
+	AddedByUserID    *int64             `json:"added_by_user_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	AddedByName      *string            `json:"added_by_name"`
+	AddedByEmail     *string            `json:"added_by_email"`
+}
+
+// Every ListSongsBy* query below returns the same column set (song columns
+// plus the joined added-by name/email) so the home page table always has
+// every column available no matter which one is sorting it. sqlc can't
+// parametrize ORDER BY, hence one near-identical query per sort column
+// rather than a single dynamic one.
+func (q *Queries) ListSongsByTitle(ctx context.Context) ([]ListSongsByTitleRow, error) {
 	rows, err := q.db.Query(ctx, listSongsByTitle)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Song
+	var items []ListSongsByTitleRow
 	for rows.Next() {
-		var i Song
+		var i ListSongsByTitleRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
@@ -347,6 +481,8 @@ func (q *Queries) ListSongsByTitle(ctx context.Context) ([]Song, error) {
 			&i.AddedByUserID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AddedByName,
+			&i.AddedByEmail,
 		); err != nil {
 			return nil, err
 		}

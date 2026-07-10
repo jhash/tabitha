@@ -55,6 +55,10 @@ full design doc and implementation plan this tracks against.
   songs (e.g. "More Rihanna" / "More Eminem" with no artist). Not filtering
   these out speculatively — revisit once we can see the actual sheet
   structure (formatting, merged cells) via the Sheets API.
+- At least one row has a stray note in the ARTIST column instead of a real
+  artist ("40th anniversary song so had to come out before 1985") — found
+  while spot-checking that the home page's artist sort actually orders
+  correctly. Storing verbatim, same reasoning as above.
 
 ## Future features (explicitly deferred, not forgotten)
 

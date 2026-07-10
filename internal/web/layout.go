@@ -22,8 +22,8 @@ func Page(title, description string, sidebar g.Node, body ...g.Node) g.Node {
 		Language:    "en",
 		HTMLAttrs:   g.Group{g.Attr("hx-boost", "true")},
 		Head: g.Group{
-			Meta(Charset("utf-8")),
-			Meta(Name("viewport"), Content("width=device-width, initial-scale=1")),
+			// charset and viewport meta tags are already inserted by
+			// components.HTML5 itself — don't duplicate them here.
 			Link(
 				Rel("preload"),
 				Href("/static/fonts/Lora-Variable.woff2"),

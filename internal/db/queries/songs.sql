@@ -32,20 +32,41 @@ FROM songs
 JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
 WHERE songs.id = $1;
 
+-- Every ListSongsBy* query below returns the same column set (song columns
+-- plus the joined added-by name/email) so the home page table always has
+-- every column available no matter which one is sorting it. sqlc can't
+-- parametrize ORDER BY, hence one near-identical query per sort column
+-- rather than a single dynamic one.
+
 -- name: ListSongsByTitle :many
-SELECT * FROM songs ORDER BY lower(title) ASC, lower(artist) ASC;
+SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.title) ASC, lower(songs.artist) ASC;
 
 -- name: ListSongsByArtist :many
-SELECT * FROM songs ORDER BY lower(artist) ASC, lower(title) ASC;
+SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.artist) ASC, lower(songs.title) ASC;
 
 -- name: ListSongsByStatus :many
-SELECT * FROM songs ORDER BY lower(status) ASC, lower(title) ASC;
+SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY lower(songs.status) ASC, lower(songs.title) ASC;
 
 -- name: ListSongsByLastUpdated :many
-SELECT * FROM songs ORDER BY updated_at DESC;
+SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY songs.updated_at DESC;
 
 -- name: ListSongsByRecentlyAdded :many
-SELECT * FROM songs ORDER BY created_at DESC;
+SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
+FROM songs
+LEFT JOIN users ON users.id = songs.added_by_user_id
+ORDER BY songs.created_at DESC;
 
 -- name: ListSongsByAddedBy :many
 SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email

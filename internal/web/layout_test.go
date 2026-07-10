@@ -54,6 +54,18 @@ func TestPageEnablesHtmxBoost(t *testing.T) {
 	}
 }
 
+func TestPageDoesNotDuplicateCharsetOrViewportMeta(t *testing.T) {
+	// components.HTML5 already inserts these — a caller adding them again
+	// produces invalid duplicate <meta> tags in <head>.
+	html := renderPage(t)
+	if n := strings.Count(html, `charset="utf-8"`); n != 1 {
+		t.Errorf(`charset meta appears %d times, want exactly 1`, n)
+	}
+	if n := strings.Count(html, `name="viewport"`); n != 1 {
+		t.Errorf(`viewport meta appears %d times, want exactly 1`, n)
+	}
+}
+
 func TestPageSetsTitleAndDescription(t *testing.T) {
 	var buf bytes.Buffer
 	if err := Page("My Song", "A great song", nil).Render(&buf); err != nil {

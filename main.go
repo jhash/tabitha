@@ -4,9 +4,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -14,6 +18,7 @@ import (
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/jobs"
+	"github.com/jhash/tabitha/internal/web"
 )
 
 func main() {
@@ -117,6 +122,42 @@ func withPool(cfg config.Config, fn func(context.Context, *pgxpool.Pool) error) 
 }
 
 func serve(cfg config.Config) error {
-	log.Printf("tabitha: serve not wired up yet (port %s)", cfg.Port)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	defer pool.Close()
+
+	queries := db.New(pool)
+
+	jobClient, err := jobs.NewClient(pool, queries)
+	if err != nil {
+		return fmt.Errorf("creating job client: %w", err)
+	}
+	if err := jobClient.Start(ctx); err != nil {
+		return fmt.Errorf("starting job client: %w", err)
+	}
+
+	httpServer := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: web.NewRouter(queries),
+	}
+
+	go func() {
+		<-ctx.Done()
+		log.Println("tabitha: shutting down...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = httpServer.Shutdown(shutdownCtx)
+		_ = jobClient.Stop(shutdownCtx)
+	}()
+
+	log.Printf("tabitha: listening on %s", cfg.Port)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("serving http: %w", err)
+	}
 	return nil
 }
