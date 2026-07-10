@@ -52,6 +52,14 @@ a:hover {
 
 .site-header {
   border-bottom: 1px solid var(--color-border);
+}
+
+/* Same max-width/centering as .layout, so "tabitha" lines up with the
+   page content's left edge instead of sitting flush against the
+   viewport. */
+.site-header-inner {
+  max-width: 64rem;
+  margin: 0 auto;
   padding: 1rem;
 }
 
@@ -70,6 +78,13 @@ a:hover {
   padding: 1.5rem 1rem;
 }
 
+/* Wide pages (the home page's songs table) use as much of the window as
+   there is, rather than capping at .layout's normal 64rem — long titles
+   and header labels get room instead of wrapping/overflowing. */
+.layout.layout-wide {
+  max-width: 100%;
+}
+
 .sidebar {
   flex: 0 0 12rem;
 }
@@ -77,6 +92,11 @@ a:hover {
 main.container {
   flex: 1 1 auto;
   max-width: var(--content-max-width);
+  min-width: 0;
+}
+
+main.container.container-wide {
+  max-width: none;
 }
 
 /* Public pages with no sidebar just center the readable column. */
@@ -94,6 +114,10 @@ td {
   text-align: left;
   padding: 0.4rem 0.75rem 0.4rem 0;
   border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  white-space: nowrap;
 }
 
 th a {

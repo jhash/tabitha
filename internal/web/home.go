@@ -65,7 +65,7 @@ func HomeHandler(q *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		page := Page("Songs", "Jeff's music transcription catalog", nil, homeContent(songs, params, statuses, addedByUsers))
+		page := PageWide("Songs", "Jeff's music transcription catalog", nil, homeContent(songs, params, statuses, addedByUsers))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}
