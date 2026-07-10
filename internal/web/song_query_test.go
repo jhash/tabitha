@@ -1,0 +1,180 @@
+package web
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/jhash/tabitha/internal/db"
+)
+
+func TestBuildSongsQueryUsesRelevanceOrderWhenSearchPresentAndNoExplicitSort(t *testing.T) {
+	query, args := buildSongsQuery(SongQueryParams{Search: "tiger"})
+	if !strings.Contains(query, "similarity(title") {
+		t.Errorf("query = %q, want it to rank by similarity when searching", query)
+	}
+	if len(args) != 3 {
+		t.Fatalf("args = %v, want 3 (status, added_by, search term)", args)
+	}
+	if args[2] != "tiger" {
+		t.Errorf("args[2] = %v, want the search term", args[2])
+	}
+}
+
+func TestBuildSongsQueryExplicitSortWinsOverSearchRelevance(t *testing.T) {
+	query, _ := buildSongsQuery(SongQueryParams{Search: "tiger", Sort: "artist", Order: "desc"})
+	if strings.Contains(query, "similarity(title") {
+		t.Errorf("query = %q, want explicit sort to override relevance ranking", query)
+	}
+	if !strings.Contains(query, "lower(artist) DESC") {
+		t.Errorf("query = %q, want ORDER BY lower(artist) DESC", query)
+	}
+}
+
+func TestBuildSongsQueryRejectsUnknownSortAndOrder(t *testing.T) {
+	query, _ := buildSongsQuery(SongQueryParams{Sort: "'; DROP TABLE songs; --", Order: "sideways"})
+	if !strings.Contains(query, "lower(title) ASC") {
+		t.Errorf("query = %q, want fallback to lower(title) ASC for invalid sort/order", query)
+	}
+}
+
+func TestListSongsQuerySearchRanksTitleAboveArtistAboveGenre(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	titleMatch, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Rocket Man", Artist: "Elton John"})
+	if err != nil {
+		t.Fatalf("seeding title match: %v", err)
+	}
+	artistMatch, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Rocketeers"})
+	if err != nil {
+		t.Fatalf("seeding artist match: %v", err)
+	}
+	genreMatch, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Yesterday", Artist: "The Beatles"})
+	if err != nil {
+		t.Fatalf("seeding genre match: %v", err)
+	}
+	genre, err := q.FindOrCreateGenre(ctx, "Rocket Rock")
+	if err != nil {
+		t.Fatalf("FindOrCreateGenre() error = %v", err)
+	}
+	if err := q.LinkSongGenre(ctx, db.LinkSongGenreParams{SongID: genreMatch.ID, GenreID: genre.ID}); err != nil {
+		t.Fatalf("LinkSongGenre() error = %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Search: "rocket"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("got %d rows, want 3", len(rows))
+	}
+
+	idOrder := []int64{rows[0].ID, rows[1].ID, rows[2].ID}
+	want := []int64{titleMatch.ID, artistMatch.ID, genreMatch.ID}
+	if !equalInt64s(idOrder, want) {
+		t.Errorf("order = %v, want title match, then artist match, then genre match: %v", idOrder, want)
+	}
+}
+
+func equalInt64s(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestListSongsQueryFiltersByStatus(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	if _, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Done Song", Status: "Done"}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if _, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "QC Song", Status: "Quality Check"}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Status: "Done"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	if len(rows) != 1 || rows[0].Title != "Done Song" {
+		t.Errorf("rows = %+v, want just Done Song", rows)
+	}
+}
+
+func TestListSongsQueryFiltersByAddedBy(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	jeff, err := q.FindOrCreateUser(ctx, db.FindOrCreateUserParams{Email: "jeff@tabitha.local", Name: "Jeff"})
+	if err != nil {
+		t.Fatalf("FindOrCreateUser() error = %v", err)
+	}
+	jake, err := q.FindOrCreateUser(ctx, db.FindOrCreateUserParams{Email: "jhash147@gmail.com", Name: "Jake"})
+	if err != nil {
+		t.Fatalf("FindOrCreateUser() error = %v", err)
+	}
+
+	jeffSong, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Jeff's Song"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	// UpsertSongFromTOC's trigger defaults added_by to Jeff already, but
+	// set both explicitly so the test doesn't depend on that default.
+	if _, err := q.DB().Exec(ctx, "UPDATE songs SET added_by_user_id = $2 WHERE id = $1", jeffSong.ID, jeff.ID); err != nil {
+		t.Fatalf("setting added_by: %v", err)
+	}
+	jakeSong, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Jake's Song"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if _, err := q.DB().Exec(ctx, "UPDATE songs SET added_by_user_id = $2 WHERE id = $1", jakeSong.ID, jake.ID); err != nil {
+		t.Fatalf("setting added_by: %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{AddedBy: "Jake"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	if len(rows) != 1 || rows[0].Title != "Jake's Song" {
+		t.Errorf("rows = %+v, want just Jake's Song", rows)
+	}
+}
+
+func TestListSongsQuerySortToggleReversesOrder(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	if _, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa"}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if _, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Yesterday"}); err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	asc, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "title", Order: "asc"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	desc, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "title", Order: "desc"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+
+	if len(asc) != 2 || len(desc) != 2 {
+		t.Fatalf("got %d asc, %d desc rows, want 2 each", len(asc), len(desc))
+	}
+	if asc[0].Title != "Africa" || asc[1].Title != "Yesterday" {
+		t.Errorf("asc order = %v, want [Africa, Yesterday]", []string{asc[0].Title, asc[1].Title})
+	}
+	if desc[0].Title != "Yesterday" || desc[1].Title != "Africa" {
+		t.Errorf("desc order = %v, want [Yesterday, Africa]", []string{desc[0].Title, desc[1].Title})
+	}
+}

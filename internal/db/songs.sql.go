@@ -117,6 +117,62 @@ func (q *Queries) GetSongCurrentVersion(ctx context.Context, id int64) (GetSongC
 	return i, err
 }
 
+const listDistinctAddedByUsers = `-- name: ListDistinctAddedByUsers :many
+SELECT DISTINCT u.name, u.email
+FROM songs s
+JOIN users u ON u.id = s.added_by_user_id
+ORDER BY u.name
+`
+
+type ListDistinctAddedByUsersRow struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+}
+
+func (q *Queries) ListDistinctAddedByUsers(ctx context.Context) ([]ListDistinctAddedByUsersRow, error) {
+	rows, err := q.db.Query(ctx, listDistinctAddedByUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDistinctAddedByUsersRow
+	for rows.Next() {
+		var i ListDistinctAddedByUsersRow
+		if err := rows.Scan(&i.Name, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDistinctStatuses = `-- name: ListDistinctStatuses :many
+SELECT DISTINCT status FROM songs WHERE status <> '' ORDER BY status
+`
+
+func (q *Queries) ListDistinctStatuses(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listDistinctStatuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSongIDsWithoutCurrentVersion = `-- name: ListSongIDsWithoutCurrentVersion :many
 SELECT id FROM songs WHERE current_version_id IS NULL ORDER BY id ASC LIMIT $1
 `
@@ -134,351 +190,6 @@ func (q *Queries) ListSongIDsWithoutCurrentVersion(ctx context.Context, limit in
 			return nil, err
 		}
 		items = append(items, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsByAddedBy = `-- name: ListSongsByAddedBy :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(users.email) ASC NULLS LAST, lower(songs.title) ASC
-`
-
-type ListSongsByAddedByRow struct {
-	ID               int64              `json:"id"`
-	Title            string             `json:"title"`
-	Artist           string             `json:"artist"`
-	Genre            string             `json:"genre"`
-	FilmShowAlbum    string             `json:"film_show_album"`
-	Decade           string             `json:"decade"`
-	BobTag           string             `json:"bob_tag"`
-	Status           string             `json:"status"`
-	SourceUrl        string             `json:"source_url"`
-	Notes            string             `json:"notes"`
-	TransposeHint    string             `json:"transpose_hint"`
-	GoogleDocID      string             `json:"google_doc_id"`
-	CurrentVersionID *int64             `json:"current_version_id"`
-	AddedByUserID    *int64             `json:"added_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	ArtistID         *int64             `json:"artist_id"`
-	AddedByName      *string            `json:"added_by_name"`
-	AddedByEmail     *string            `json:"added_by_email"`
-}
-
-func (q *Queries) ListSongsByAddedBy(ctx context.Context) ([]ListSongsByAddedByRow, error) {
-	rows, err := q.db.Query(ctx, listSongsByAddedBy)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsByAddedByRow
-	for rows.Next() {
-		var i ListSongsByAddedByRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Artist,
-			&i.Genre,
-			&i.FilmShowAlbum,
-			&i.Decade,
-			&i.BobTag,
-			&i.Status,
-			&i.SourceUrl,
-			&i.Notes,
-			&i.TransposeHint,
-			&i.GoogleDocID,
-			&i.CurrentVersionID,
-			&i.AddedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ArtistID,
-			&i.AddedByName,
-			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsByArtist = `-- name: ListSongsByArtist :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(songs.artist) ASC, lower(songs.title) ASC
-`
-
-type ListSongsByArtistRow struct {
-	ID               int64              `json:"id"`
-	Title            string             `json:"title"`
-	Artist           string             `json:"artist"`
-	Genre            string             `json:"genre"`
-	FilmShowAlbum    string             `json:"film_show_album"`
-	Decade           string             `json:"decade"`
-	BobTag           string             `json:"bob_tag"`
-	Status           string             `json:"status"`
-	SourceUrl        string             `json:"source_url"`
-	Notes            string             `json:"notes"`
-	TransposeHint    string             `json:"transpose_hint"`
-	GoogleDocID      string             `json:"google_doc_id"`
-	CurrentVersionID *int64             `json:"current_version_id"`
-	AddedByUserID    *int64             `json:"added_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	ArtistID         *int64             `json:"artist_id"`
-	AddedByName      *string            `json:"added_by_name"`
-	AddedByEmail     *string            `json:"added_by_email"`
-}
-
-func (q *Queries) ListSongsByArtist(ctx context.Context) ([]ListSongsByArtistRow, error) {
-	rows, err := q.db.Query(ctx, listSongsByArtist)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsByArtistRow
-	for rows.Next() {
-		var i ListSongsByArtistRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Artist,
-			&i.Genre,
-			&i.FilmShowAlbum,
-			&i.Decade,
-			&i.BobTag,
-			&i.Status,
-			&i.SourceUrl,
-			&i.Notes,
-			&i.TransposeHint,
-			&i.GoogleDocID,
-			&i.CurrentVersionID,
-			&i.AddedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ArtistID,
-			&i.AddedByName,
-			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsByLastUpdated = `-- name: ListSongsByLastUpdated :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY songs.updated_at DESC
-`
-
-type ListSongsByLastUpdatedRow struct {
-	ID               int64              `json:"id"`
-	Title            string             `json:"title"`
-	Artist           string             `json:"artist"`
-	Genre            string             `json:"genre"`
-	FilmShowAlbum    string             `json:"film_show_album"`
-	Decade           string             `json:"decade"`
-	BobTag           string             `json:"bob_tag"`
-	Status           string             `json:"status"`
-	SourceUrl        string             `json:"source_url"`
-	Notes            string             `json:"notes"`
-	TransposeHint    string             `json:"transpose_hint"`
-	GoogleDocID      string             `json:"google_doc_id"`
-	CurrentVersionID *int64             `json:"current_version_id"`
-	AddedByUserID    *int64             `json:"added_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	ArtistID         *int64             `json:"artist_id"`
-	AddedByName      *string            `json:"added_by_name"`
-	AddedByEmail     *string            `json:"added_by_email"`
-}
-
-func (q *Queries) ListSongsByLastUpdated(ctx context.Context) ([]ListSongsByLastUpdatedRow, error) {
-	rows, err := q.db.Query(ctx, listSongsByLastUpdated)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsByLastUpdatedRow
-	for rows.Next() {
-		var i ListSongsByLastUpdatedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Artist,
-			&i.Genre,
-			&i.FilmShowAlbum,
-			&i.Decade,
-			&i.BobTag,
-			&i.Status,
-			&i.SourceUrl,
-			&i.Notes,
-			&i.TransposeHint,
-			&i.GoogleDocID,
-			&i.CurrentVersionID,
-			&i.AddedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ArtistID,
-			&i.AddedByName,
-			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsByRecentlyAdded = `-- name: ListSongsByRecentlyAdded :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY songs.created_at DESC
-`
-
-type ListSongsByRecentlyAddedRow struct {
-	ID               int64              `json:"id"`
-	Title            string             `json:"title"`
-	Artist           string             `json:"artist"`
-	Genre            string             `json:"genre"`
-	FilmShowAlbum    string             `json:"film_show_album"`
-	Decade           string             `json:"decade"`
-	BobTag           string             `json:"bob_tag"`
-	Status           string             `json:"status"`
-	SourceUrl        string             `json:"source_url"`
-	Notes            string             `json:"notes"`
-	TransposeHint    string             `json:"transpose_hint"`
-	GoogleDocID      string             `json:"google_doc_id"`
-	CurrentVersionID *int64             `json:"current_version_id"`
-	AddedByUserID    *int64             `json:"added_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	ArtistID         *int64             `json:"artist_id"`
-	AddedByName      *string            `json:"added_by_name"`
-	AddedByEmail     *string            `json:"added_by_email"`
-}
-
-func (q *Queries) ListSongsByRecentlyAdded(ctx context.Context) ([]ListSongsByRecentlyAddedRow, error) {
-	rows, err := q.db.Query(ctx, listSongsByRecentlyAdded)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsByRecentlyAddedRow
-	for rows.Next() {
-		var i ListSongsByRecentlyAddedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Artist,
-			&i.Genre,
-			&i.FilmShowAlbum,
-			&i.Decade,
-			&i.BobTag,
-			&i.Status,
-			&i.SourceUrl,
-			&i.Notes,
-			&i.TransposeHint,
-			&i.GoogleDocID,
-			&i.CurrentVersionID,
-			&i.AddedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ArtistID,
-			&i.AddedByName,
-			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsByStatus = `-- name: ListSongsByStatus :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(songs.status) ASC, lower(songs.title) ASC
-`
-
-type ListSongsByStatusRow struct {
-	ID               int64              `json:"id"`
-	Title            string             `json:"title"`
-	Artist           string             `json:"artist"`
-	Genre            string             `json:"genre"`
-	FilmShowAlbum    string             `json:"film_show_album"`
-	Decade           string             `json:"decade"`
-	BobTag           string             `json:"bob_tag"`
-	Status           string             `json:"status"`
-	SourceUrl        string             `json:"source_url"`
-	Notes            string             `json:"notes"`
-	TransposeHint    string             `json:"transpose_hint"`
-	GoogleDocID      string             `json:"google_doc_id"`
-	CurrentVersionID *int64             `json:"current_version_id"`
-	AddedByUserID    *int64             `json:"added_by_user_id"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	ArtistID         *int64             `json:"artist_id"`
-	AddedByName      *string            `json:"added_by_name"`
-	AddedByEmail     *string            `json:"added_by_email"`
-}
-
-func (q *Queries) ListSongsByStatus(ctx context.Context) ([]ListSongsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, listSongsByStatus)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsByStatusRow
-	for rows.Next() {
-		var i ListSongsByStatusRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Title,
-			&i.Artist,
-			&i.Genre,
-			&i.FilmShowAlbum,
-			&i.Decade,
-			&i.BobTag,
-			&i.Status,
-			&i.SourceUrl,
-			&i.Notes,
-			&i.TransposeHint,
-			&i.GoogleDocID,
-			&i.CurrentVersionID,
-			&i.AddedByUserID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.ArtistID,
-			&i.AddedByName,
-			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

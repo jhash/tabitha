@@ -26,17 +26,17 @@ func sampleSongRows() []SongRow {
 	}
 }
 
-func renderHomeTable(t *testing.T, songs []SongRow, sort string) string {
+func renderHomeTable(t *testing.T, songs []SongRow, params SongQueryParams) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := homeTable(songs, sort).Render(&buf); err != nil {
+	if err := homeTable(songs, params).Render(&buf); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	return buf.String()
 }
 
 func TestHomeTableListsEachSongWithLinkToShowPage(t *testing.T) {
-	html := renderHomeTable(t, sampleSongRows(), "title")
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title"})
 	if !strings.Contains(html, `href="/songs/2"`) {
 		t.Error("expected a link to /songs/2 for Africa")
 	}
@@ -49,7 +49,7 @@ func TestHomeTableListsEachSongWithLinkToShowPage(t *testing.T) {
 }
 
 func TestHomeTableHasSortableColumnHeaders(t *testing.T) {
-	html := renderHomeTable(t, sampleSongRows(), "title")
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title"})
 	for _, col := range []string{"title", "artist", "updated", "added", "status", "added_by"} {
 		if !strings.Contains(html, "sort="+col) {
 			t.Errorf("expected a sort link for column %q, got: %s", col, html)
@@ -58,7 +58,7 @@ func TestHomeTableHasSortableColumnHeaders(t *testing.T) {
 }
 
 func TestHomeTableShowsStatusAndAddedBy(t *testing.T) {
-	html := renderHomeTable(t, sampleSongRows(), "title")
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title"})
 	if !strings.Contains(html, "Done") || !strings.Contains(html, "Quality Check") {
 		t.Error("expected both status values to render")
 	}
@@ -76,8 +76,35 @@ func TestHomeTableShowsStatusAndAddedBy(t *testing.T) {
 func TestHomeTableWorksWithoutJavaScriptAsPlainLinks(t *testing.T) {
 	// Sort headers must be real <a href> links (not just hx-get-only spans)
 	// so the page still works with JS disabled, per the SSR-first goal.
-	html := renderHomeTable(t, sampleSongRows(), "title")
-	if !strings.Contains(html, `<a href="/?sort=artist"`) {
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title"})
+	if !strings.Contains(html, `<a href="/?`) || !strings.Contains(html, "sort=artist") {
 		t.Errorf("expected a real <a href> sort link, got: %s", html)
+	}
+}
+
+func TestHomeTableActiveSortColumnShowsAscendingArrowByDefault(t *testing.T) {
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title", Order: "asc"})
+	if !strings.Contains(html, "Title ▴") {
+		t.Errorf("expected an ascending arrow on the active Title column, got: %s", html)
+	}
+}
+
+func TestHomeTableActiveSortColumnTogglesToDescendingLinkWhenAlreadyAscending(t *testing.T) {
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "status", Order: "asc"})
+	if !strings.Contains(html, "Status ▴") {
+		t.Errorf("expected ascending arrow on active Status column, got: %s", html)
+	}
+	if !strings.Contains(html, "order=desc&amp;sort=status") {
+		t.Errorf("expected Status header's link to toggle to order=desc, got: %s", html)
+	}
+}
+
+func TestHomeTableActiveSortColumnTogglesToAscendingLinkWhenAlreadyDescending(t *testing.T) {
+	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "status", Order: "desc"})
+	if !strings.Contains(html, "Status ▾") {
+		t.Errorf("expected descending arrow on active Status column, got: %s", html)
+	}
+	if !strings.Contains(html, "order=asc&amp;sort=status") {
+		t.Errorf("expected Status header's link to toggle back to order=asc, got: %s", html)
 	}
 }

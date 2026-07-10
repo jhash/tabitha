@@ -51,7 +51,7 @@ func setupTestQueries(t *testing.T) *db.Queries {
 	return db.New(pool)
 }
 
-func TestListSongsSortedEachSortColumnReturnsAllSeededSongs(t *testing.T) {
+func TestListSongsQueryEachSortColumnReturnsAllSeededSongs(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()
 
@@ -65,20 +65,17 @@ func TestListSongsSortedEachSortColumnReturnsAllSeededSongs(t *testing.T) {
 	}
 
 	for _, sort := range sortColumns {
-		rows, resolvedSort, err := listSongsSorted(ctx, q, sort)
+		rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: sort})
 		if err != nil {
-			t.Fatalf("listSongsSorted(%q) error = %v", sort, err)
-		}
-		if resolvedSort != sort {
-			t.Errorf("listSongsSorted(%q) resolved sort = %q", sort, resolvedSort)
+			t.Fatalf("ListSongsQuery(sort=%q) error = %v", sort, err)
 		}
 		if len(rows) != 2 {
-			t.Errorf("listSongsSorted(%q) returned %d rows, want 2", sort, len(rows))
+			t.Errorf("ListSongsQuery(sort=%q) returned %d rows, want 2", sort, len(rows))
 		}
 	}
 }
 
-func TestListSongsSortedFallsBackToTitleForUnknownSort(t *testing.T) {
+func TestListSongsQueryFallsBackToTitleForUnknownSort(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()
 
@@ -86,11 +83,11 @@ func TestListSongsSortedFallsBackToTitleForUnknownSort(t *testing.T) {
 		t.Fatalf("seeding song: %v", err)
 	}
 
-	_, resolvedSort, err := listSongsSorted(ctx, q, "'; DROP TABLE songs; --")
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "'; DROP TABLE songs; --"})
 	if err != nil {
-		t.Fatalf("listSongsSorted() error = %v", err)
+		t.Fatalf("ListSongsQuery() error = %v", err)
 	}
-	if resolvedSort != "title" {
-		t.Errorf("resolvedSort = %q, want fallback to title", resolvedSort)
+	if len(rows) != 1 || rows[0].Title != "Zzz" {
+		t.Errorf("rows = %+v, want the seeded song still returned (fallback to title sort)", rows)
 	}
 }

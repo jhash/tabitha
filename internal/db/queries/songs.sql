@@ -50,32 +50,11 @@ FROM songs
 LEFT JOIN users ON users.id = songs.added_by_user_id
 ORDER BY lower(songs.title) ASC, lower(songs.artist) ASC;
 
--- name: ListSongsByArtist :many
-SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(songs.artist) ASC, lower(songs.title) ASC;
+-- name: ListDistinctStatuses :many
+SELECT DISTINCT status FROM songs WHERE status <> '' ORDER BY status;
 
--- name: ListSongsByStatus :many
-SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(songs.status) ASC, lower(songs.title) ASC;
-
--- name: ListSongsByLastUpdated :many
-SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY songs.updated_at DESC;
-
--- name: ListSongsByRecentlyAdded :many
-SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY songs.created_at DESC;
-
--- name: ListSongsByAddedBy :many
-SELECT songs.*, users.name AS added_by_name, users.email AS added_by_email
-FROM songs
-LEFT JOIN users ON users.id = songs.added_by_user_id
-ORDER BY lower(users.email) ASC NULLS LAST, lower(songs.title) ASC;
+-- name: ListDistinctAddedByUsers :many
+SELECT DISTINCT u.name, u.email
+FROM songs s
+JOIN users u ON u.id = s.added_by_user_id
+ORDER BY u.name;
