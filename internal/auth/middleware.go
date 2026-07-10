@@ -41,3 +41,29 @@ func RequireSuperadmin(q *db.Queries) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// OptionalUser attaches the current user to the request context when a
+// valid session cookie is present, but never blocks the request — public
+// pages stay public for everyone, whether or not they're logged in. It's
+// how a public page decides whether to show a superadmin-only affordance
+// (e.g. an inline "Edit" link) without gating the page itself.
+func OptionalUser(q *db.Queries) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			cookie, err := r.Cookie(SessionCookieName)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			user, err := CurrentUser(r.Context(), q, cookie.Value)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), userContextKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
