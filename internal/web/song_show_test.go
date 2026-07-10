@@ -9,10 +9,10 @@ import (
 	"github.com/jhash/tabitha/internal/transcription"
 )
 
-func renderSongShow(t *testing.T, song db.Song, blocks []transcription.Block, hasVersion bool) string {
+func renderSongShow(t *testing.T, song db.Song, blocks []transcription.Block, hasVersion, viewerIsSuperadmin bool) string {
 	t.Helper()
 	var buf bytes.Buffer
-	if err := songShowContent(song, blocks, hasVersion).Render(&buf); err != nil {
+	if err := songShowContent(song, blocks, hasVersion, viewerIsSuperadmin).Render(&buf); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	return buf.String()
@@ -20,7 +20,7 @@ func renderSongShow(t *testing.T, song db.Song, blocks []transcription.Block, ha
 
 func TestSongShowRendersTitleAndArtist(t *testing.T) {
 	song := db.Song{Title: "(I Can't Get No) Satisfaction", Artist: "Rolling Stones, the"}
-	html := renderSongShow(t, song, nil, false)
+	html := renderSongShow(t, song, nil, false, false)
 	if !strings.Contains(html, "(I Can&#39;t Get No) Satisfaction") {
 		t.Error("expected title to render (HTML-escaped)")
 	}
@@ -31,7 +31,7 @@ func TestSongShowRendersTitleAndArtist(t *testing.T) {
 
 func TestSongShowWithoutVersionShowsNotYetDigestedMessage(t *testing.T) {
 	song := db.Song{Title: "Africa", Artist: "Toto"}
-	html := renderSongShow(t, song, nil, false)
+	html := renderSongShow(t, song, nil, false, false)
 	if !strings.Contains(html, "hasn&#39;t been digested") {
 		t.Errorf("expected a not-yet-digested message, got: %s", html)
 	}
@@ -51,7 +51,7 @@ func TestSongShowRendersTranscriptionPreservingAlignment(t *testing.T) {
 			},
 		},
 	}
-	html := renderSongShow(t, db.Song{Title: "Satisfaction"}, blocks, true)
+	html := renderSongShow(t, db.Song{Title: "Satisfaction"}, blocks, true, false)
 
 	if !strings.Contains(html, "CHORUS:") {
 		t.Error("expected section header to render")
@@ -64,5 +64,21 @@ func TestSongShowRendersTranscriptionPreservingAlignment(t *testing.T) {
 	}
 	if !strings.Contains(html, "E") || !strings.Contains(html, "I can&#39;t get no satisfaction") {
 		t.Errorf("expected chord and lyric text to render, got: %s", html)
+	}
+}
+
+func TestSongShowHidesEditLinkFromRegularViewers(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	html := renderSongShow(t, song, nil, false, false)
+	if strings.Contains(html, "/songs/42/edit") {
+		t.Error("expected no edit link for a non-superadmin viewer")
+	}
+}
+
+func TestSongShowShowsEditLinkToSuperadmins(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	html := renderSongShow(t, song, nil, false, true)
+	if !strings.Contains(html, "/songs/42/edit") {
+		t.Errorf("expected an edit link pointing at /songs/42/edit for a superadmin viewer, got: %s", html)
 	}
 }

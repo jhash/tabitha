@@ -331,3 +331,70 @@ func TestAdminToolsRouteRequiresSuperadminSession(t *testing.T) {
 		t.Errorf("GET /admin/tools without a session status = %d, want 404", rec.Code)
 	}
 }
+
+func TestSongEditRouteRequires404ForAnonymousViewer(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d/edit", song.ID), nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /songs/%d/edit anonymously status = %d, want 404", song.ID, rec.Code)
+	}
+}
+
+func TestSongEditRouteServesPageForSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, _ := superadminSession(t, q)
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, fmt.Sprintf("/songs/%d/edit", song.ID), token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/%d/edit for superadmin status = %d, want 200", song.ID, rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Africa") {
+		t.Errorf("expected the edit page to mention the song title, got: %s", rec.Body.String())
+	}
+}
+
+func TestSongShowRouteShowsEditLinkOnlyToSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	editLink := fmt.Sprintf("/songs/%d/edit", song.ID)
+
+	r := NewRouter(config.Config{}, q, nil)
+
+	anonRec := httptest.NewRecorder()
+	r.ServeHTTP(anonRec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d", song.ID), nil))
+	if strings.Contains(anonRec.Body.String(), editLink) {
+		t.Error("anonymous viewer should not see the edit link")
+	}
+
+	token, _ := superadminSession(t, q)
+	adminRec := doAdminRequest(r, http.MethodGet, fmt.Sprintf("/songs/%d", song.ID), token)
+	if !strings.Contains(adminRec.Body.String(), editLink) {
+		t.Errorf("superadmin viewer should see the edit link, got: %s", adminRec.Body.String())
+	}
+}

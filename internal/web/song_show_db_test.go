@@ -151,7 +151,7 @@ func TestFullPipelineRealSatisfactionFileParseStoreFetchRender(t *testing.T) {
 
 	// And the HTML page itself must contain that exact text inside a <pre>,
 	// proving the alignment survives all the way to what a browser renders.
-	html := renderSongShow(t, song, blocks, hasVersion)
+	html := renderSongShow(t, song, blocks, hasVersion, false)
 	if !strings.Contains(html, "<pre") {
 		t.Error("expected the transcription inside a <pre> element")
 	}

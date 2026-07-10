@@ -21,12 +21,14 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(auth.OptionalUser(q))
 
 	fileServer := http.FileServer(http.Dir("static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 
 	r.Get("/", HomeHandler(q))
 	r.Get("/songs/{id}", SongShowHandler(q))
+	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/edit", SongEditHandler(q))
 
 	if auth.GoogleConfigured(cfg) {
 		configureGoogleAuth(cfg)
