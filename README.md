@@ -44,6 +44,14 @@ go run . migrate up   # applies both tabitha's schema and River's own tables
 go run . serve         # http://localhost:8080
 ```
 
+For live-reload during development, use [air](https://github.com/air-verse/air)
+(`go install github.com/air-verse/air@latest`) instead of `go run . serve` —
+`.air.toml` is already configured to rebuild and restart on any `.go` change:
+
+```sh
+air   # same http://localhost:8080, rebuilds on save
+```
+
 ### Environment variables
 
 See [`.env.example`](.env.example) for the full list with descriptions.
