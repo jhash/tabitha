@@ -120,7 +120,8 @@ The running tabitha service in Docker Swarm can't access environment variables d
 
 ```bash
 # SSH to server and run any command (migrate, jobs, promote, etc.)
-export OCI_SERVER_IP=129.213.42.66
+# OCI_SERVER_IP from oracle/secrets/oci_ip.enc.json (never hard-code)
+export OCI_SERVER_IP=$(sops --decrypt ../oracle/secrets/oci_ip.enc.json | jq -r '.oci_server_ip')
 CONTAINER_ID=$(ssh deploy@$OCI_SERVER_IP 'docker ps --filter "label=com.docker.swarm.service.name=tabitha_tabitha" -q | head -1')
 
 ssh deploy@$OCI_SERVER_IP "docker exec $CONTAINER_ID sh -c '
