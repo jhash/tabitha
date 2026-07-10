@@ -1,0 +1,26 @@
+Template Song
+As performed by:
+Key:  , Original
+INTRO:
+
+Option + J = ∆ = maj7
+Shift + Option + 8 = ° = dim
+
+C
+C2 = C9 (I think)
+C4 = Csus
+C5 = Cno3
+C3 = Cno5
+C6
+C7
+C∆ = Cmaj7 = CM
+Cm
+Cm7
+Cm6
+Cm∆
+C+ = Caug = C5#
+C- = C5b
+C° = Cdim
+C(m) = Cmaj/min
+C9- = Cb9 = C7b9 = C7b2 = C2- = C#°6/C = Bb°6/C (ie, C is played in bass but not in right hand)
+NC = no chord = break (not in bold)

@@ -58,11 +58,22 @@ full design doc and implementation plan this tracks against.
       Moved ahead of the ProseMirror editor at Jake's request (2026-07-10)
       so he can start on separate deployment work sooner.
 
+- [x] `/healthz` — actually pings Postgres, not just "process alive." Added
+      a self-contained `tabitha healthcheck` CLI subcommand (no curl/wget
+      dependency) and wired it into the Dockerfile's `HEALTHCHECK`.
+      Verified against a real running container. Prioritized ahead of
+      everything else at Jake's request, to unblock a Docker Swarm deploy.
+- [x] Captured Jake's 2026-07-10 meeting notes with Jeff — see
+      [`docs/jeff-domain-notes.md`](docs/jeff-domain-notes.md) for the full
+      writeup (transpose workflow, TOC color-coding conventions, chord
+      notation edge cases, live-performance UX priorities, and several new
+      future-feature ideas). The canonical notation legend Jeff uses is now
+      saved at `music/template-song.txt`.
+
 ## In progress / next up
 
 - [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
       placeholder at `/songs/{id}/edit`
-- [ ] `/healthz`
 - [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
 
 ## Blocked on Jake's Google login
@@ -75,7 +86,12 @@ actually blocked on Jake's own Google credentials existing:
       Docs fetch in `digest_song`, using the stored OAuth token. ntfy push on
       re-auth needed.
 - [ ] First full catalog digestion — then revisit the block parser against
-      whatever real formatting variety shows up (expected; see design doc)
+      whatever real formatting variety shows up (expected; see design doc).
+      Known in advance from Jeff's notes: a single doc can contain more
+      than one key's transcription, separated by a page break (his
+      transpose workflow) — digestion needs to detect that and split into
+      multiple `transcription_versions` rows, not assume one doc = one
+      version. See `docs/jeff-domain-notes.md`.
 - [ ] ProseMirror editor, schema finalized against the confirmed real-world range
 - [ ] Cloudflare CDN + auto-purge on song change
 - [ ] Sitemap + per-page meta tags
@@ -102,4 +118,19 @@ actually blocked on Jake's own Google credentials existing:
 - [ ] Scraping from other sources (e-chords, etc.)
 - [ ] LLM-based auto-transcription: reconcile multiple scraped versions into
       a consensus on key/lyrics
-- [ ] Audio-upload transcription (no source text at all, just audio)
+- [ ] Audio-upload transcription (no source text at all, just audio) — Jeff
+      separately asked whether AI-listen-and-transcribe raises legal
+      questions; not researched yet, ask Jake before spending time on it
+- [ ] Genre as many-to-many (own table + join table, not a `songs` column)
+- [ ] Crowd-sourced quality-check workflow + a superadmin "seal of
+      approval" step — implies more than the current user/superadmin role
+      split
+- [ ] Per-user notation preference (∆ / maj7 / M for major-seventh, etc.)
+- [ ] Per-song sheet-music PDF, shown inline/popup (Jeff has these separately)
+- [ ] Live-performance reading mode: swipe-between-pages (not scroll),
+      auto-detect phone vs. iPad layout — see OnSong (what Jeff currently
+      uses on cruise gigs) as prior art for this specifically
+- [ ] Live MIDI recording (or other live-ingestion path) as an alternative
+      way to create a transcription
+
+Full context for all of the above: [`docs/jeff-domain-notes.md`](docs/jeff-domain-notes.md).
