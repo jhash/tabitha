@@ -39,10 +39,15 @@ full design doc and implementation plan this tracks against.
       `tabitha_test_migrate` database, and documented `go test -p 1 ./...`
       as the required way to run the full suite (see README).
 
+- [x] Superadmin CLI promote command (`tabitha promote <email>`, docs at
+      `docs/promote-admin.md` covering direct + `docker exec` use) +
+      `/admin/users` UI to list/promote from the browser
+- [x] `/admin/tools` UI to trigger a toc-sync from the browser (enqueues the
+      same job the CLI does; verified a real `river_job` row lands, not just
+      that the handler ran)
+
 ## In progress / next up
 
-- [ ] Superadmin CLI promote command + docs + `/admin/users` UI
-- [ ] `/admin/tools` UI to trigger ingestion
 - [ ] Inline admin edit/add affordances on public pages
 - [ ] Dockerfile + verify both run modes
 - [ ] `/healthz`
@@ -50,10 +55,9 @@ full design doc and implementation plan this tracks against.
 
 ## Blocked on Jake's Google login
 
-Everything above (`/admin/users`, `/admin/tools`, inline edit affordances) is
-buildable and testable now the same way `/admin` itself was: a
-hand-constructed session bypassing real OAuth. What's actually blocked on
-Jake's own Google credentials existing:
+Inline edit affordances are buildable and testable now the same way /admin
+itself was: a hand-constructed session bypassing real OAuth. What's
+actually blocked on Jake's own Google credentials existing:
 
 - [ ] Real Sheets API hyperlink extraction (`google_doc_id` per song) + real
       Docs fetch in `digest_song`, using the stored OAuth token. ntfy push on
@@ -64,7 +68,6 @@ Jake's own Google credentials existing:
 - [ ] Cloudflare CDN + auto-purge on song change
 - [ ] Sitemap + per-page meta tags
 - [ ] Monitoring/SLO dashboards for the <100ms public-render target
-- [ ] `gh repo create tabitha --public` + push
 
 ## Known oddities in the real data (observed during the toc_sync smoke test)
 
