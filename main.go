@@ -47,9 +47,28 @@ func run(args []string) error {
 		return runJobs(cfg, args[1:])
 	case "promote":
 		return runPromote(cfg, args[1:])
+	case "healthcheck":
+		return runHealthcheck(cfg)
 	default:
-		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs, promote)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs, promote, healthcheck)", cmd)
 	}
+}
+
+// runHealthcheck hits the running server's own /healthz over loopback and
+// fails if it's not a 200. Meant for Docker's HEALTHCHECK (and Swarm/
+// Compose, which read it): self-contained rather than relying on curl or
+// wget existing in the image.
+func runHealthcheck(cfg config.Config) error {
+	resp, err := http.Get("http://localhost:" + cfg.Port + "/healthz")
+	if err != nil {
+		return fmt.Errorf("healthcheck: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("healthcheck: /healthz returned %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // runPromote grants an existing user the superadmin role — see

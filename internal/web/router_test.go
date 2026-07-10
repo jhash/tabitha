@@ -332,6 +332,18 @@ func TestAdminToolsRouteRequiresSuperadminSession(t *testing.T) {
 	}
 }
 
+func TestHealthzRouteIsWiredAndPublic(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET /healthz status = %d, want 200", rec.Code)
+	}
+}
+
 func TestSongEditRouteRequires404ForAnonymousViewer(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)

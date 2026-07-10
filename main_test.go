@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -92,5 +95,43 @@ func TestRunPromoteFailsForUnknownEmail(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nobody@example.com") {
 		t.Errorf("error = %v, want it to mention the email that wasn't found", err)
+	}
+}
+
+func testServerPort(t *testing.T, handler http.Handler) string {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parsing test server URL: %v", err)
+	}
+	return u.Port()
+}
+
+func TestRunHealthcheckSucceedsWhenServerHealthy(t *testing.T) {
+	port := testServerPort(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	if err := runHealthcheck(config.Config{Port: port}); err != nil {
+		t.Errorf("runHealthcheck() error = %v", err)
+	}
+}
+
+func TestRunHealthcheckFailsWhenServerReturnsError(t *testing.T) {
+	port := testServerPort(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+
+	if err := runHealthcheck(config.Config{Port: port}); err == nil {
+		t.Error("runHealthcheck() succeeded, want an error for a 503 response")
+	}
+}
+
+func TestRunHealthcheckFailsWhenServerUnreachable(t *testing.T) {
+	if err := runHealthcheck(config.Config{Port: "1"}); err == nil {
+		t.Error("runHealthcheck() succeeded against an unreachable port, want an error")
 	}
 }
