@@ -114,6 +114,40 @@ tabitha promote <email>             # grant an existing user the superadmin role
 Superadmin promotion, including `docker exec` usage: see
 [`docs/promote-admin.md`](docs/promote-admin.md).
 
+## Running CLI commands on the OCI instance
+
+The running tabitha service in Docker Swarm can't access environment variables directly via `docker exec` — secrets are only mounted at startup. To run any CLI command, export the secrets as env vars first:
+
+```bash
+# SSH to server and run any command (migrate, jobs, promote, etc.)
+export OCI_SERVER_IP=129.213.42.66
+CONTAINER_ID=$(ssh deploy@$OCI_SERVER_IP 'docker ps --filter "label=com.docker.swarm.service.name=tabitha_tabitha" -q | head -1')
+
+ssh deploy@$OCI_SERVER_IP "docker exec $CONTAINER_ID sh -c '
+  for f in /run/secrets/tabitha_*; do
+    [ -f \"\$f\" ] || continue
+    name=\"\$(basename \"\$f\")\"
+    key=\"\${name#tabitha_}\"
+    export \"\$key=\$(cat \"\$f\")\"
+  done
+  ./tabitha <command>
+'"
+```
+
+Examples:
+
+```bash
+# Enqueue and process a table-of-contents sync
+./tabitha jobs enqueue toc-sync
+./tabitha jobs work
+
+# Promote a user to superadmin
+./tabitha promote user@example.com
+
+# Run migrations (if needed)
+./tabitha migrate up
+```
+
 ## Regenerating the query layer
 
 After editing anything in `internal/db/queries/*.sql` or the migrations:
