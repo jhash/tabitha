@@ -124,3 +124,29 @@ sqlc generate
 
 Generated code is committed (matches this project's closest reference,
 go-jake) — no build step needed to run the app.
+
+## Docker
+
+Multi-stage build (`golang:1.25-alpine` → `alpine:3.20`), static binary,
+runs as a non-root user. Migrations are a separate explicit step, not run
+automatically on container boot — same two-step flow as local dev, and
+safer if this ever runs as more than one replica.
+
+```sh
+docker build -t tabitha .
+
+# One-time (or after adding a migration) — point at your real database:
+docker run --rm -e DATABASE_URL=postgres://user@host:5432/tabitha_prod tabitha migrate up
+
+# Then run the server. --env-file is the easiest way to pass everything
+# in .env at once (APP_URL, GOOGLE_KEY/SECRET, TOKEN_ENCRYPTION_KEY, etc.)
+docker run --rm -p 8080:8080 --env-file .env tabitha
+```
+
+Testing against your own machine's Postgres from inside the container
+(Docker Desktop on Mac/Windows): use `host.docker.internal` in
+`DATABASE_URL` instead of `localhost` — confirmed working against a local
+homebrew Postgres with the default trust-auth `pg_hba.conf`.
+
+`tabitha promote <email>` works the same way against a running
+container — see [`docs/promote-admin.md`](docs/promote-admin.md).

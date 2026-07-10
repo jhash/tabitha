@@ -1,0 +1,10 @@
+.git
+tmp/
+.env
+*.log
+*.test
+node_modules/
+static/dist/
+docs/
+.air.toml
+.github/
