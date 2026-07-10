@@ -45,11 +45,23 @@ full design doc and implementation plan this tracks against.
 - [x] `/admin/tools` UI to trigger a toc-sync from the browser (enqueues the
       same job the CLI does; verified a real `river_job` row lands, not just
       that the handler ran)
+- [x] Inline superadmin "Edit" link on the song show page (`OptionalUser`
+      middleware — session-aware but never gates the public page itself) +
+      a placeholder `/songs/{id}/edit` page (raw transcription, superadmin-
+      gated) for the ProseMirror editor to replace next
+- [x] `air` configured for live-reload during local dev (`.air.toml`,
+      rebuilds/restarts on `.go` changes)
+- [x] Production Dockerfile (multi-stage, non-root, ~44MB image) — verified
+      both run modes for real: `go run .`/`air` locally, and a built image
+      running `migrate up` then `serve` against the host's real Postgres via
+      `host.docker.internal`, including static assets and non-root user.
+      Moved ahead of the ProseMirror editor at Jake's request (2026-07-10)
+      so he can start on separate deployment work sooner.
 
 ## In progress / next up
 
-- [ ] Inline admin edit/add affordances on public pages
-- [ ] Dockerfile + verify both run modes
+- [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
+      placeholder at `/songs/{id}/edit`
 - [ ] `/healthz`
 - [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
 
