@@ -30,7 +30,8 @@ brew install postgresql@17
 brew services start postgresql@17
 
 createdb tabitha_dev
-createdb tabitha_test   # used by the test suite
+createdb tabitha_test           # used by the test suite
+createdb tabitha_test_migrate   # isolated db for the migrate up/down round-trip test
 
 cp .env.example .env    # then fill in values — see below
 ```
@@ -70,13 +71,27 @@ Drive/Docs access — see todos.md for the current status of that gate.
 ## Tests
 
 ```sh
-go test ./...
+go test -p 1 ./...
 ```
+
+`-p 1` matters: several packages' integration tests truncate and reseed
+tables in the same shared `tabitha_test` database, and Go otherwise runs
+different packages' tests in parallel OS processes — without `-p 1` two
+packages can truncate/insert into the same tables at the same moment and
+produce flaky, cross-contaminated results. Tests within a single package
+already run sequentially, so `go test ./internal/web/...` (etc.) is fine
+without the flag.
 
 Most tests are pure/unit (sub-millisecond). A few integration tests hit a
 real local Postgres — they read `TEST_DATABASE_URL` (defaults to
 `postgres:///tabitha_test?sslmode=disable`) and run migrations
 automatically; nothing needs to be pre-seeded.
+
+One test (`TestMigrateUpCreatesAllTablesThenDownDropsThem`) exercises
+`migrate down`, which drops every table — it runs against its own database
+(`TEST_MIGRATE_DATABASE_URL`, defaults to
+`postgres:///tabitha_test_migrate?sslmode=disable`) so it can never race
+other tests relying on `tabitha_test`'s schema staying intact.
 
 ## CLI reference
 

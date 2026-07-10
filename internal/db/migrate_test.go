@@ -8,11 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// testDatabaseURL is deliberately its own database, never the shared
+// tabitha_test used by every other package's tests: this test's whole
+// point is to MigrateDown (drop every table), which would yank the schema
+// out from under any other test concurrently relying on it being present.
 func testDatabaseURL(t *testing.T) string {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
+	url := os.Getenv("TEST_MIGRATE_DATABASE_URL")
 	if url == "" {
-		url = "postgres:///tabitha_test?sslmode=disable"
+		url = "postgres:///tabitha_test_migrate?sslmode=disable"
 	}
 	return url
 }

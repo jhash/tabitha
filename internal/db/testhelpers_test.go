@@ -32,9 +32,24 @@ func setupTestDB(t *testing.T) *Queries {
 	}
 	t.Cleanup(pool.Close)
 
-	_, err = pool.Exec(ctx, "TRUNCATE songs, transcription_versions, users, sessions, google_oauth_tokens RESTART IDENTITY CASCADE")
+	// internal/auth, internal/web, and internal/jobs each truncate
+	// overlapping tables concurrently in their own `go test ./...` package
+	// processes against this same shared test DB. Serialize with a
+	// transaction-scoped advisory lock (shared key across all copies of
+	// this helper) to avoid a cross-process TRUNCATE deadlock.
+	tx, err := pool.Begin(ctx)
 	if err != nil {
+		t.Fatalf("beginning truncate tx: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(72469)"); err != nil {
+		t.Fatalf("acquiring test db truncate lock: %v", err)
+	}
+	if _, err := tx.Exec(ctx, "TRUNCATE songs, transcription_versions, users, sessions, google_oauth_tokens RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncating test db: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("committing truncate tx: %v", err)
 	}
 
 	return New(pool)

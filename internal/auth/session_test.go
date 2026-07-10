@@ -28,8 +28,26 @@ func setupTestQueries(t *testing.T) *db.Queries {
 	}
 	t.Cleanup(pool.Close)
 
-	if _, err := pool.Exec(ctx, "TRUNCATE users, sessions RESTART IDENTITY CASCADE"); err != nil {
+	// internal/web's test package truncates overlapping tables (users, and
+	// anything CASCADE reaches from it) concurrently in its own process
+	// when `go test ./...` runs packages in parallel. Two concurrent
+	// TRUNCATEs over overlapping table sets can lock-order-invert and
+	// deadlock, so serialize with a transaction-scoped advisory lock
+	// (shared key with internal/web's copy of this helper) instead of
+	// truncating directly on the pool.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("beginning truncate tx: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(72469)"); err != nil {
+		t.Fatalf("acquiring test db truncate lock: %v", err)
+	}
+	if _, err := tx.Exec(ctx, "TRUNCATE users, sessions RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncating test db: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("committing truncate tx: %v", err)
 	}
 	return db.New(pool)
 }
