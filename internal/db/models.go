@@ -103,6 +103,7 @@ type Song struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	ArtistID         *int64             `json:"artist_id"`
+	PreferredKey     string             `json:"preferred_key"`
 }
 
 type SongGenre struct {
