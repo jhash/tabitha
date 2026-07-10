@@ -29,6 +29,9 @@ SELECT * FROM songs WHERE id = $1;
 -- name: GetSongByTitle :one
 SELECT * FROM songs WHERE lower(title) = lower($1);
 
+-- name: ListSongIDsWithoutCurrentVersion :many
+SELECT id FROM songs WHERE current_version_id IS NULL ORDER BY id ASC LIMIT $1;
+
 -- name: GetSongCurrentVersion :one
 SELECT sqlc.embed(songs), sqlc.embed(transcription_versions)
 FROM songs

@@ -1,7 +1,9 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -13,16 +15,31 @@ import (
 	"github.com/jhash/tabitha/internal/jobs"
 )
 
-// AdminToolsHandler is the ingestion-trigger page: for now, a single button
-// to enqueue a table-of-contents sync. digest_song stays CLI/worker-only
-// until Task 23's real Google OAuth token exists to run it with.
-func AdminToolsHandler(w http.ResponseWriter, r *http.Request) {
-	page := Page("Tools", "tabitha admin — tools", nil, adminToolsContent())
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = page.Render(w)
+// AdminToolsHandler is the ingestion-trigger page: buttons to enqueue a
+// toc-sync, digest one song by title, or digest a batch of undigested
+// songs — plus a status table of recent job runs (state, song, last
+// error) so Jake can see what's being digested and why something failed
+// without going to psql. jobClient may be nil in contexts that never
+// render this page for real (kept nil-safe rather than assuming callers
+// always have one wired up).
+func AdminToolsHandler(jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var jobsList []jobs.JobSummary
+		if jobClient != nil {
+			var err error
+			jobsList, err = jobs.RecentJobs(r.Context(), jobClient, 30)
+			if err != nil {
+				http.Error(w, "failed to load recent jobs", http.StatusInternalServerError)
+				return
+			}
+		}
+		page := Page("Tools", "tabitha admin — tools", nil, adminToolsContent(jobsList))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_ = page.Render(w)
+	}
 }
 
-func adminToolsContent() g.Node {
+func adminToolsContent(recentJobs []jobs.JobSummary) g.Node {
 	return Div(
 		H1(g.Text("Tools")),
 		FormEl(Method("post"), Action("/admin/tools/toc-sync"),
@@ -32,6 +49,36 @@ func adminToolsContent() g.Node {
 			Input(Type("text"), Name("title"), Placeholder("Song title (exact match)")),
 			Button(Type("submit"), g.Text("Digest song")),
 		),
+		FormEl(Method("post"), Action("/admin/tools/digest-batch"),
+			Input(Type("number"), Name("limit"), Value("50")),
+			Button(Type("submit"), g.Text("Digest a batch of undigested songs")),
+		),
+		H2(g.Text("Recent jobs")),
+		recentJobsTable(recentJobs),
+	)
+}
+
+func recentJobsTable(jobsList []jobs.JobSummary) g.Node {
+	if len(jobsList) == 0 {
+		return P(g.Text("No jobs run yet."))
+	}
+	rows := make([]g.Node, len(jobsList))
+	for i, j := range jobsList {
+		rows[i] = Tr(
+			Td(g.Text(fmt.Sprintf("%d", j.ID))),
+			Td(g.Text(j.Kind)),
+			Td(g.Text(j.State)),
+			Td(g.Text(fmt.Sprintf("%d", j.Attempt))),
+			Td(g.Text(j.Detail)),
+			Td(g.Text(j.LastError)),
+		)
+	}
+	return Table(
+		THead(Tr(
+			Th(g.Text("ID")), Th(g.Text("Kind")), Th(g.Text("State")),
+			Th(g.Text("Attempt")), Th(g.Text("Detail")), Th(g.Text("Last error")),
+		)),
+		TBody(rows...),
 	)
 }
 
@@ -60,6 +107,25 @@ func AdminTriggerDigestSongHandler(q *db.Queries, jobClient *river.Client[pgx.Tx
 		}
 		if err := jobs.EnqueueDigestSong(r.Context(), jobClient, song.ID); err != nil {
 			http.Error(w, "failed to enqueue digest", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/tools", http.StatusFound)
+	}
+}
+
+// AdminTriggerDigestBatchHandler enqueues digest_song jobs for the oldest
+// (by id) undigested songs, up to the given limit — a small, checkable
+// slice of the 1,925-song catalog rather than the whole thing at once, so
+// unknown edge cases surface on a batch small enough to review.
+func AdminTriggerDigestBatchHandler(q *db.Queries, jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit, err := strconv.Atoi(r.FormValue("limit"))
+		if err != nil || limit <= 0 {
+			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+			return
+		}
+		if _, err := jobs.EnqueueDigestSongsForUndigested(r.Context(), jobClient, q, int32(limit)); err != nil {
+			http.Error(w, "failed to enqueue digest batch", http.StatusInternalServerError)
 			return
 		}
 		http.Redirect(w, r, "/admin/tools", http.StatusFound)

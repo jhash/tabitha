@@ -114,6 +114,30 @@ func (q *Queries) GetSongCurrentVersion(ctx context.Context, id int64) (GetSongC
 	return i, err
 }
 
+const listSongIDsWithoutCurrentVersion = `-- name: ListSongIDsWithoutCurrentVersion :many
+SELECT id FROM songs WHERE current_version_id IS NULL ORDER BY id ASC LIMIT $1
+`
+
+func (q *Queries) ListSongIDsWithoutCurrentVersion(ctx context.Context, limit int32) ([]int64, error) {
+	rows, err := q.db.Query(ctx, listSongIDsWithoutCurrentVersion, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSongsByAddedBy = `-- name: ListSongsByAddedBy :many
 SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, users.name AS added_by_name, users.email AS added_by_email
 FROM songs

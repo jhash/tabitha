@@ -63,3 +63,20 @@ func EnqueueDigestSong(ctx context.Context, client *river.Client[pgx.Tx], songID
 	_, err := client.Insert(ctx, DigestSongArgs{SongID: songID}, nil)
 	return err
 }
+
+// EnqueueDigestSongsForUndigested inserts a digest_song job for each of the
+// oldest (by id) undigested songs, up to limit. Used by /admin/tools'
+// batch trigger to derisk the full 1,925-song catalog on a small,
+// checkable slice first rather than running everything at once.
+func EnqueueDigestSongsForUndigested(ctx context.Context, client *river.Client[pgx.Tx], q *db.Queries, limit int32) (int, error) {
+	ids, err := q.ListSongIDsWithoutCurrentVersion(ctx, limit)
+	if err != nil {
+		return 0, fmt.Errorf("jobs: listing undigested songs: %w", err)
+	}
+	for _, id := range ids {
+		if _, err := client.Insert(ctx, DigestSongArgs{SongID: id}, nil); err != nil {
+			return 0, fmt.Errorf("jobs: enqueuing digest_song for song %d: %w", id, err)
+		}
+	}
+	return len(ids), nil
+}

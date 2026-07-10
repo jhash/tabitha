@@ -382,6 +382,54 @@ func TestAdminTriggerDigestSongReturns404ForUnknownTitle(t *testing.T) {
 	}
 }
 
+func TestAdminTriggerDigestBatchEnqueuesJobsForUndigestedSongsOnly(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, _ := superadminSession(t, q)
+	jobClient := testJobClient(t)
+
+	undigested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Undigested Song", Artist: "Someone"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	digested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Already Digested Song", Artist: "Someone Else"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: digested.ID, Kind: "primary", Source: "google_doc_scrape", RawText: "x", Content: []byte("[]"),
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: digested.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, jobClient)
+	rec := doAdminFormRequest(r, http.MethodPost, "/admin/tools/digest-batch", token, url.Values{"limit": {"50"}})
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("POST /admin/tools/digest-batch status = %d, want 302", rec.Code)
+	}
+
+	result, err := jobClient.JobList(context.Background(), river.NewJobListParams().Kinds("digest_song"))
+	if err != nil {
+		t.Fatalf("JobList() error = %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("got %d digest_song jobs queued, want 1 (only the undigested song)", len(result.Jobs))
+	}
+	var args jobs.DigestSongArgs
+	if err := json.Unmarshal(result.Jobs[0].EncodedArgs, &args); err != nil {
+		t.Fatalf("unmarshaling job args: %v", err)
+	}
+	if args.SongID != undigested.ID {
+		t.Errorf("queued SongID = %d, want %d (the undigested one)", args.SongID, undigested.ID)
+	}
+}
+
 func TestAdminToolsRouteRequiresSuperadminSession(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)
