@@ -1,0 +1,121 @@
+/* Self-hosted Lora, variable font (covers regular through bold in one file,
+   another for italic through bold-italic) — no Google Fonts CDN request, no
+   FOUT: font-display: optional means the browser either has the font in
+   time for first paint or falls through to the fallback stack for that
+   render entirely, swapping in next time it's cached. WOFF2 only (~85KB vs.
+   ~210KB as raw TTF) — universally supported, no fallback format needed. */
+@font-face {
+  font-family: "Lora";
+  src: url("/static/fonts/Lora-Variable.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: optional;
+}
+
+@font-face {
+  font-family: "Lora";
+  src: url("/static/fonts/Lora-Italic-Variable.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: optional;
+}
+
+:root {
+  --color-fg: #111;
+  --color-bg: #fff;
+  --color-border: #ccc;
+  --color-muted: #666;
+  --content-max-width: 42rem;
+  --font-body: "Lora", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  line-height: 1.6;
+  font-size: 1.125rem;
+}
+
+a {
+  color: var(--color-fg);
+}
+
+a:hover {
+  color: var(--color-muted);
+}
+
+.site-header {
+  border-bottom: 1px solid var(--color-border);
+  padding: 1rem;
+}
+
+.site-header .site-title {
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 1.25rem;
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+.sidebar {
+  flex: 0 0 12rem;
+}
+
+main.container {
+  flex: 1 1 auto;
+  max-width: var(--content-max-width);
+}
+
+/* Public pages with no sidebar just center the readable column. */
+.layout.no-sidebar {
+  justify-content: center;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+th a {
+  text-decoration: none;
+}
+
+/* Chord-over-lyric transcription blocks: monospace so Jeff's original
+   column alignment reproduces exactly. See internal/transcription. */
+.chord-line,
+.lyric-line {
+  font-family: var(--font-mono);
+  white-space: pre;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.chord-line {
+  color: var(--color-muted);
+  font-weight: 700;
+}
+
+.section-header {
+  font-weight: 700;
+  margin-top: 1.5rem;
+}

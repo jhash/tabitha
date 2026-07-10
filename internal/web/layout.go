@@ -1,0 +1,60 @@
+// Package web holds tabitha's SSR HTML layer: gomponents-rendered pages,
+// shared layout chrome, and route handlers.
+package web
+
+import (
+	g "maragu.dev/gomponents"
+	c "maragu.dev/gomponents/components"
+	. "maragu.dev/gomponents/html"
+)
+
+const siteName = "tabitha"
+
+// Page renders a full HTML5 document with tabitha's shared chrome: a
+// self-hosted, preloaded Lora font (no CDN, no FOUT), the Roux-derived
+// reset plus our stylesheet, self-hosted htmx with hx-boost enabled
+// site-wide, and a plain header. sidebar is optional (nil renders none —
+// most public pages don't have one).
+func Page(title, description string, sidebar g.Node, body ...g.Node) g.Node {
+	return c.HTML5(c.HTML5Props{
+		Title:       title + " · " + siteName,
+		Description: description,
+		Language:    "en",
+		HTMLAttrs:   g.Group{g.Attr("hx-boost", "true")},
+		Head: g.Group{
+			Meta(Charset("utf-8")),
+			Meta(Name("viewport"), Content("width=device-width, initial-scale=1")),
+			Link(
+				Rel("preload"),
+				Href("/static/fonts/Lora-Variable.woff2"),
+				As("font"),
+				Type("font/woff2"),
+				CrossOrigin("anonymous"),
+			),
+			Link(Rel("stylesheet"), Href("/static/css/reset.css")),
+			Link(Rel("stylesheet"), Href("/static/css/style.css")),
+		},
+		Body: g.Group{
+			Header(Class("site-header"),
+				A(Class("site-title"), Href("/"), g.Text(siteName)),
+			),
+			layoutRow(sidebar, body...),
+			Script(Src("/static/js/htmx.min.js")),
+		},
+	})
+}
+
+func layoutRow(sidebar g.Node, body ...g.Node) g.Node {
+	classes := "layout"
+	if sidebar == nil {
+		classes += " no-sidebar"
+	}
+
+	children := make([]g.Node, 0, 2)
+	if sidebar != nil {
+		children = append(children, Div(Class("sidebar"), sidebar))
+	}
+	children = append(children, Main(Class("container"), g.Group(body)))
+
+	return Div(append([]g.Node{Class(classes)}, children...)...)
+}

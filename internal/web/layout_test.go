@@ -1,0 +1,134 @@
+package web
+
+import (
+	"bytes"
+	"os"
+	"strings"
+	"testing"
+)
+
+func renderPage(t *testing.T) string {
+	t.Helper()
+	var buf bytes.Buffer
+	node := Page("Test", "Test page", nil)
+	if err := node.Render(&buf); err != nil {
+		t.Fatalf("failed to render page: %v", err)
+	}
+	return buf.String()
+}
+
+func TestPagePreloadsLoraFont(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, "/static/fonts/Lora-Variable.woff2") {
+		t.Error("expected page head to preload /static/fonts/Lora-Variable.woff2")
+	}
+	if !strings.Contains(html, `rel="preload"`) {
+		t.Error("expected font preload to include rel=\"preload\"")
+	}
+	if !strings.Contains(html, `as="font"`) {
+		t.Error("expected font preload to include as=\"font\"")
+	}
+}
+
+func TestPageDoesNotLoadFontsFromGoogleCDN(t *testing.T) {
+	html := renderPage(t)
+	if strings.Contains(html, "fonts.googleapis.com") || strings.Contains(html, "fonts.gstatic.com") {
+		t.Error("page must not load fonts from Google Fonts CDN — use self-hosted fonts to prevent FOUT")
+	}
+}
+
+func TestPageLoadsHtmxSelfHostedNotFromCDN(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, "/static/js/htmx.min.js") {
+		t.Error("expected page to load self-hosted /static/js/htmx.min.js")
+	}
+	if strings.Contains(html, "unpkg.com") || strings.Contains(html, "cdn.jsdelivr.net") || strings.Contains(html, "cdn.tailwindcss") {
+		t.Error("page must not load htmx (or any script) from a third-party CDN")
+	}
+}
+
+func TestPageEnablesHtmxBoost(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, `hx-boost="true"`) {
+		t.Error(`expected hx-boost="true" so pages work without JS and boosting enhances them`)
+	}
+}
+
+func TestPageSetsTitleAndDescription(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Page("My Song", "A great song", nil).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, "<title>My Song") {
+		t.Errorf("expected <title> to contain %q, got: %s", "My Song", html)
+	}
+	if !strings.Contains(html, `content="A great song"`) {
+		t.Error("expected meta description to contain the page description")
+	}
+}
+
+func TestCSSDefinesFontFaceForLora(t *testing.T) {
+	css := readRepoFile(t, "static/css/style.css")
+	if !strings.Contains(css, "@font-face") {
+		t.Error("expected style.css to contain @font-face rules for self-hosted Lora")
+	}
+	if !strings.Contains(css, "Lora-Variable.woff2") {
+		t.Error("expected @font-face to reference the self-hosted Lora woff2 file")
+	}
+}
+
+func TestCSSFontFaceUsesFontDisplayOptional(t *testing.T) {
+	css := readRepoFile(t, "static/css/style.css")
+	if !strings.Contains(css, "font-display: optional") {
+		t.Error("expected @font-face to use font-display: optional to prevent FOUT")
+	}
+}
+
+func TestVendoredStaticAssetsExistOnDisk(t *testing.T) {
+	// The rendered HTML referencing a path (tested above) doesn't prove the
+	// file is actually there — assert both, since a page can link to a
+	// self-hosted asset that was never actually placed at that path.
+	for _, f := range []string{
+		"static/fonts/Lora-Variable.woff2",
+		"static/fonts/Lora-Italic-Variable.woff2",
+		"static/js/htmx.min.js",
+		"static/css/reset.css",
+		"static/css/style.css",
+	} {
+		if _, err := os.Stat(repoPath(t, f)); err != nil {
+			t.Errorf("expected vendored asset to exist on disk: %s (%v)", f, err)
+		}
+	}
+}
+
+func TestLoraFontFilesExistAndAreSmallEnoughToPreload(t *testing.T) {
+	for _, f := range []string{
+		"static/fonts/Lora-Variable.woff2",
+		"static/fonts/Lora-Italic-Variable.woff2",
+	} {
+		info, err := os.Stat(repoPath(t, f))
+		if err != nil {
+			t.Fatalf("expected font file to exist: %s (%v)", f, err)
+		}
+		// Sanity budget: a self-hosted, preloaded font this project treats
+		// as render-blocking-ish should stay well under 200KB.
+		if info.Size() > 200*1024 {
+			t.Errorf("%s is %d bytes, expected under 200KB", f, info.Size())
+		}
+	}
+}
+
+func repoPath(t *testing.T, rel string) string {
+	t.Helper()
+	return "../../" + rel
+}
+
+func readRepoFile(t *testing.T, rel string) string {
+	t.Helper()
+	data, err := os.ReadFile(repoPath(t, rel))
+	if err != nil {
+		t.Fatalf("reading %s: %v", rel, err)
+	}
+	return string(data)
+}
