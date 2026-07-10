@@ -67,6 +67,51 @@ func TestSongShowRendersTranscriptionPreservingAlignment(t *testing.T) {
 	}
 }
 
+func TestSongShowOmitsDuplicateTitleAndBylineFromTranscription(t *testing.T) {
+	// The digested doc's own first two lines repeat exactly what the
+	// page's own H1/byline already show — Downtown / As performed by:
+	// Petula Clark, rendered twice, was the bug report.
+	blocks := []transcription.Block{
+		{Kind: transcription.TextLine, Text: "Downtown"},
+		{Kind: transcription.TextLine, Text: "As performed by: Petula Clark"},
+		{Kind: transcription.TextLine, Text: "Key:  E, Original E"},
+		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
+	}
+	song := db.Song{Title: "Downtown", Artist: "Petula Clark"}
+	html := renderSongShow(t, song, blocks, true, false)
+
+	if strings.Count(html, "Downtown") != 1 {
+		t.Errorf("want \"Downtown\" to appear exactly once (H1 only), got %d times: %s", strings.Count(html, "Downtown"), html)
+	}
+	if strings.Count(html, "Petula Clark") != 1 {
+		t.Errorf("want \"Petula Clark\" to appear exactly once (byline only), got %d times: %s", strings.Count(html, "Petula Clark"), html)
+	}
+	// The Key line isn't a duplicate — it's new info the page's own
+	// chrome doesn't show elsewhere — so it should still render.
+	if !strings.Contains(html, "Key:  E, Original E") {
+		t.Errorf("expected the Key line to still render, got: %s", html)
+	}
+	if !strings.Contains(html, "VERSE 1:") {
+		t.Errorf("expected the rest of the transcription to still render, got: %s", html)
+	}
+}
+
+func TestSongShowKeepsTranscriptionWhenFirstLinesDontMatchTitleArtist(t *testing.T) {
+	// Don't trim anything if the doc doesn't actually start with the
+	// title/artist lines — some digested docs might not follow the
+	// convention exactly, and blind trimming would eat real content.
+	blocks := []transcription.Block{
+		{Kind: transcription.SectionHeader, Text: "INTRO:"},
+		{Kind: transcription.TextLine, Text: "some other content"},
+	}
+	song := db.Song{Title: "Downtown", Artist: "Petula Clark"}
+	html := renderSongShow(t, song, blocks, true, false)
+
+	if !strings.Contains(html, "INTRO:") || !strings.Contains(html, "some other content") {
+		t.Errorf("expected transcription content to render unmodified, got: %s", html)
+	}
+}
+
 func TestSongShowHidesEditLinkFromRegularViewers(t *testing.T) {
 	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
 	html := renderSongShow(t, song, nil, false, false)

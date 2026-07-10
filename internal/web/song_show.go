@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -77,7 +78,30 @@ func songShowContent(song db.Song, blocks []transcription.Block, hasVersion, vie
 			P(Class("no-content"), g.Text("This song hasn't been digested from Jeff's Google Doc yet.")),
 		),
 		g.If(hasVersion,
-			Pre(Class("transcription"), g.Text(transcription.Render(blocks))),
+			Pre(Class("transcription"), g.Text(transcription.Render(omitDuplicateTitleByline(blocks, song)))),
 		),
 	)
+}
+
+// omitDuplicateTitleByline drops the digested doc's own leading title and
+// "As performed by: <artist>" lines when this page's H1/byline already
+// show the same thing — otherwise both render (see the "Downtown" bug
+// report). Only trims when the first one or two lines actually match;
+// docs that don't follow Jeff's title/byline convention exactly render
+// unmodified rather than risk eating real content.
+func omitDuplicateTitleByline(blocks []transcription.Block, song db.Song) []transcription.Block {
+	i := 0
+	if i < len(blocks) && isDuplicateLine(blocks[i], song.Title) {
+		i++
+	} else {
+		return blocks
+	}
+	if i < len(blocks) && isDuplicateLine(blocks[i], "As performed by: "+song.Artist) {
+		i++
+	}
+	return blocks[i:]
+}
+
+func isDuplicateLine(b transcription.Block, want string) bool {
+	return b.Kind == transcription.TextLine && strings.EqualFold(strings.TrimSpace(b.Text), strings.TrimSpace(want))
 }
