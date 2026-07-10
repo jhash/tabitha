@@ -18,6 +18,7 @@ func AdminHomeHandler(w http.ResponseWriter, r *http.Request) {
 			H1(g.Text("Admin")),
 			P(g.Text("Signed in as "+user.Email)),
 			P(A(Href("/admin/users"), g.Text("Manage users"))),
+			P(A(Href("/admin/tools"), g.Text("Tools"))),
 			A(Href("/auth/logout"), g.Text("Log out")),
 		),
 	)

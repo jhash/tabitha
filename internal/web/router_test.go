@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/markbates/goth"
+	"github.com/riverqueue/river"
 
 	"github.com/jhash/tabitha/internal/auth"
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
+	"github.com/jhash/tabitha/internal/jobs"
 )
 
 // superadminSession creates and promotes a user, returning a session token
@@ -43,6 +48,55 @@ func doAdminRequest(r http.Handler, method, path, token string) *httptest.Respon
 	return rec
 }
 
+// testJobClient builds a real River client against the shared test
+// database, so /admin/tools tests can verify an actual job row lands in
+// the queue rather than just trusting the handler called the right
+// function. Its own pool is independent of setupTestQueries' — two pools
+// against the same database is normal and not a race.
+func testJobClient(t *testing.T) *river.Client[pgx.Tx] {
+	t.Helper()
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		url = "postgres:///tabitha_test?sslmode=disable"
+	}
+
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil {
+		t.Fatalf("connecting to test db: %v", err)
+	}
+	t.Cleanup(pool.Close)
+
+	if err := jobs.MigrateUp(ctx, pool); err != nil {
+		t.Fatalf("migrating river schema: %v", err)
+	}
+
+	// Same shared-fixture-db lock the other setup helpers use (see
+	// internal/{auth,web,jobs,db}) — go test -p 1 makes this a formality
+	// for this specific table, but it's cheap and keeps the pattern
+	// uniform in case that ever changes.
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("beginning truncate tx: %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(72469)"); err != nil {
+		t.Fatalf("acquiring test db truncate lock: %v", err)
+	}
+	if _, err := tx.Exec(ctx, "TRUNCATE river_job RESTART IDENTITY"); err != nil {
+		t.Fatalf("truncating river_job: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("committing truncate tx: %v", err)
+	}
+
+	client, err := jobs.NewClient(pool, db.New(pool))
+	if err != nil {
+		t.Fatalf("creating river client: %v", err)
+	}
+	return client
+}
+
 func fakeGoogleConfig() config.Config {
 	return config.Config{
 		AppURL:        "https://tabitha.example.com",
@@ -56,7 +110,7 @@ func TestAuthRoutesNotMountedWithoutGoogleCredentials(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/auth/google", nil))
 
@@ -69,7 +123,7 @@ func TestAuthRoutesMountedWithGoogleCredentialsRedirectsToGoogle(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)
 
-	r := NewRouter(fakeGoogleConfig(), q)
+	r := NewRouter(fakeGoogleConfig(), q, nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/auth/google", nil))
 
@@ -86,7 +140,7 @@ func TestAdminRouteRequiresSuperadminSession(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin", nil))
 
@@ -112,7 +166,7 @@ func TestAdminRouteServesPageForSuperadmin(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 	rec := httptest.NewRecorder()
@@ -137,7 +191,7 @@ func TestAuthLogoutClearsSessionCookieAndServerSideSession(t *testing.T) {
 		t.Fatalf("CreateSession() error = %v", err)
 	}
 
-	r := NewRouter(fakeGoogleConfig(), q)
+	r := NewRouter(fakeGoogleConfig(), q, nil)
 	req := httptest.NewRequest(http.MethodGet, "/auth/logout", nil)
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 	rec := httptest.NewRecorder()
@@ -170,7 +224,7 @@ func TestAdminUsersRouteServesPageForSuperadmin(t *testing.T) {
 	q := setupTestQueries(t)
 	token, _ := superadminSession(t, q)
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	rec := doAdminRequest(r, http.MethodGet, "/admin/users", token)
 
 	if rec.Code != http.StatusOK {
@@ -192,7 +246,7 @@ func TestAdminPromoteUserPromotesAndRedirects(t *testing.T) {
 		t.Fatalf("FindOrCreateUser() error = %v", err)
 	}
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	rec := doAdminRequest(r, http.MethodPost, fmt.Sprintf("/admin/users/%d/promote", target.ID), token)
 
 	if rec.Code != http.StatusFound {
@@ -216,10 +270,64 @@ func TestAdminPromoteUserReturns404ForUnknownID(t *testing.T) {
 	q := setupTestQueries(t)
 	token, _ := superadminSession(t, q)
 
-	r := NewRouter(config.Config{}, q)
+	r := NewRouter(config.Config{}, q, nil)
 	rec := doAdminRequest(r, http.MethodPost, "/admin/users/999999/promote", token)
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("POST /admin/users/999999/promote status = %d, want 404", rec.Code)
+	}
+}
+
+func TestAdminToolsRouteServesPageForSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, "/admin/tools", token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/tools status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/admin/tools/toc-sync") {
+		t.Errorf("expected the toc-sync trigger form, got: %s", rec.Body.String())
+	}
+}
+
+func TestAdminTriggerTocSyncEnqueuesJobAndRedirects(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+	jobClient := testJobClient(t)
+
+	r := NewRouter(config.Config{}, q, jobClient)
+	rec := doAdminRequest(r, http.MethodPost, "/admin/tools/toc-sync", token)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("POST /admin/tools/toc-sync status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/tools" {
+		t.Errorf("Location = %q, want /admin/tools", loc)
+	}
+
+	result, err := jobClient.JobList(context.Background(), river.NewJobListParams().Kinds("toc_sync"))
+	if err != nil {
+		t.Fatalf("JobList() error = %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Errorf("got %d toc_sync jobs queued, want 1", len(result.Jobs))
+	}
+}
+
+func TestAdminToolsRouteRequiresSuperadminSession(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/tools", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /admin/tools without a session status = %d, want 404", rec.Code)
 	}
 }

@@ -167,7 +167,7 @@ func serve(cfg config.Config) error {
 
 	httpServer := &http.Server{
 		Addr:    ":" + cfg.Port,
-		Handler: web.NewRouter(cfg, queries),
+		Handler: web.NewRouter(cfg, queries, jobClient),
 	}
 
 	go func() {
