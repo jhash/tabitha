@@ -26,6 +26,9 @@ UPDATE songs SET current_version_id = $2, updated_at = now() WHERE id = $1;
 -- name: GetSongByID :one
 SELECT * FROM songs WHERE id = $1;
 
+-- name: GetSongByTitle :one
+SELECT * FROM songs WHERE lower(title) = lower($1);
+
 -- name: GetSongCurrentVersion :one
 SELECT sqlc.embed(songs), sqlc.embed(transcription_versions)
 FROM songs

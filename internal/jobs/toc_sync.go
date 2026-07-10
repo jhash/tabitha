@@ -13,11 +13,14 @@ import (
 	"github.com/jhash/tabitha/internal/db"
 )
 
-// tocSheetURL is Jeffrey's table-of-contents Google Sheet, exported as CSV.
-// This works unauthenticated for cell values (confirmed directly) — only
-// per-row Google Doc hyperlinks require the Sheets API + a stored OAuth
-// token, which TocSyncWorker doesn't yet have (see design doc Phase 2).
-const tocSheetURL = "https://docs.google.com/spreadsheets/d/1uqJfZ7TyH-Ii_dJGvby6MH-uVyH0xFkG7RQ3bxARezQ/export?format=csv&gid=0"
+// tocSpreadsheetID is Jeffrey's table-of-contents Google Sheet.
+const tocSpreadsheetID = "1uqJfZ7TyH-Ii_dJGvby6MH-uVyH0xFkG7RQ3bxARezQ"
+
+// tocSheetURL is the sheet's CSV export. This works unauthenticated for
+// cell values (confirmed directly) — only per-row Google Doc hyperlinks
+// require the Sheets API + a stored OAuth token (see google_docs.go, used
+// by DigestSongWorker).
+const tocSheetURL = "https://docs.google.com/spreadsheets/d/" + tocSpreadsheetID + "/export?format=csv&gid=0"
 
 // TocSyncArgs triggers a table-of-contents sync: fetch the sheet, upsert
 // every row into songs. Takes no parameters — there's only one sheet.

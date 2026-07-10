@@ -12,6 +12,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
 
+	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 )
 
@@ -30,10 +31,12 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 // NewClient builds a River client with all of tabitha's workers registered.
-func NewClient(pool *pgxpool.Pool, queries *db.Queries) (*river.Client[pgx.Tx], error) {
+// encryptionKey may be nil wherever DigestSongWorker is never exercised
+// (e.g. `jobs enqueue toc-sync`, which only ever touches TocSyncWorker).
+func NewClient(pool *pgxpool.Pool, queries *db.Queries, cfg config.Config, encryptionKey []byte) (*river.Client[pgx.Tx], error) {
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &TocSyncWorker{Queries: queries})
-	river.AddWorker(workers, &DigestSongWorker{Queries: queries})
+	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey})
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -48,8 +51,15 @@ func NewClient(pool *pgxpool.Pool, queries *db.Queries) (*river.Client[pgx.Tx], 
 }
 
 // EnqueueTocSync inserts a toc_sync job. Used by both the CLI
-// (`tabitha jobs enqueue toc-sync`) and, later, /admin/tools.
+// (`tabitha jobs enqueue toc-sync`) and /admin/tools.
 func EnqueueTocSync(ctx context.Context, client *river.Client[pgx.Tx]) error {
 	_, err := client.Insert(ctx, TocSyncArgs{}, nil)
+	return err
+}
+
+// EnqueueDigestSong inserts a digest_song job for one song. Used by
+// /admin/tools' "digest by title" trigger.
+func EnqueueDigestSong(ctx context.Context, client *river.Client[pgx.Tx], songID int64) error {
+	_, err := client.Insert(ctx, DigestSongArgs{SongID: songID}, nil)
 	return err
 }

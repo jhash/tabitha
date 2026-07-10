@@ -39,6 +39,34 @@ func (q *Queries) GetSongByID(ctx context.Context, id int64) (Song, error) {
 	return i, err
 }
 
+const getSongByTitle = `-- name: GetSongByTitle :one
+SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at FROM songs WHERE lower(title) = lower($1)
+`
+
+func (q *Queries) GetSongByTitle(ctx context.Context, lower string) (Song, error) {
+	row := q.db.QueryRow(ctx, getSongByTitle, lower)
+	var i Song
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Artist,
+		&i.Genre,
+		&i.FilmShowAlbum,
+		&i.Decade,
+		&i.BobTag,
+		&i.Status,
+		&i.SourceUrl,
+		&i.Notes,
+		&i.TransposeHint,
+		&i.GoogleDocID,
+		&i.CurrentVersionID,
+		&i.AddedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getSongCurrentVersion = `-- name: GetSongCurrentVersion :one
 SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
 FROM songs

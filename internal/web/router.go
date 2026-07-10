@@ -43,6 +43,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 		r.Post("/users/{id}/promote", AdminPromoteUserHandler(q))
 		r.Get("/tools", AdminToolsHandler)
 		r.Post("/tools/toc-sync", AdminTriggerTocSyncHandler(jobClient))
+		r.Post("/tools/digest-song", AdminTriggerDigestSongHandler(q, jobClient))
 	})
 
 	return r

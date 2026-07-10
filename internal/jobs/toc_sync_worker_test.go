@@ -2,7 +2,6 @@ package jobs
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -80,16 +79,3 @@ func TestTocSyncWorkerUpsertsRowsFromHTTPResponse(t *testing.T) {
 	}
 }
 
-func TestDigestSongWorkerCancelsUntilOAuthWired(t *testing.T) {
-	q := setupTestQueries(t)
-	worker := &DigestSongWorker{Queries: q}
-
-	job := &river.Job[DigestSongArgs]{JobRow: &rivertype.JobRow{}, Args: DigestSongArgs{SongID: 1}}
-	err := worker.Work(context.Background(), job)
-	if err == nil {
-		t.Fatal("Work() error = nil, want an error until a Google OAuth token exists")
-	}
-	if !errors.Is(err, ErrNoOAuthToken) {
-		t.Errorf("Work() error = %v, want it to wrap ErrNoOAuthToken", err)
-	}
-}

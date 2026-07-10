@@ -2,9 +2,11 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -42,6 +44,15 @@ func superadminSession(t *testing.T, q *db.Queries) (token string, user db.User)
 
 func doAdminRequest(r http.Handler, method, path, token string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	return rec
+}
+
+func doAdminFormRequest(r http.Handler, method, path, token string, form url.Values) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -90,7 +101,7 @@ func testJobClient(t *testing.T) *river.Client[pgx.Tx] {
 		t.Fatalf("committing truncate tx: %v", err)
 	}
 
-	client, err := jobs.NewClient(pool, db.New(pool))
+	client, err := jobs.NewClient(pool, db.New(pool), config.Config{}, nil)
 	if err != nil {
 		t.Fatalf("creating river client: %v", err)
 	}
@@ -316,6 +327,58 @@ func TestAdminTriggerTocSyncEnqueuesJobAndRedirects(t *testing.T) {
 	}
 	if len(result.Jobs) != 1 {
 		t.Errorf("got %d toc_sync jobs queued, want 1", len(result.Jobs))
+	}
+}
+
+func TestAdminTriggerDigestSongEnqueuesJobForMatchingTitle(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, _ := superadminSession(t, q)
+	jobClient := testJobClient(t)
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Great Balls of Fire", Artist: "Jerry Lee Lewis"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, jobClient)
+	rec := doAdminFormRequest(r, http.MethodPost, "/admin/tools/digest-song", token, url.Values{"title": {"Great Balls of Fire"}})
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("POST /admin/tools/digest-song status = %d, want 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/tools" {
+		t.Errorf("Location = %q, want /admin/tools", loc)
+	}
+
+	result, err := jobClient.JobList(context.Background(), river.NewJobListParams().Kinds("digest_song"))
+	if err != nil {
+		t.Fatalf("JobList() error = %v", err)
+	}
+	if len(result.Jobs) != 1 {
+		t.Fatalf("got %d digest_song jobs queued, want 1", len(result.Jobs))
+	}
+	var args jobs.DigestSongArgs
+	if err := json.Unmarshal(result.Jobs[0].EncodedArgs, &args); err != nil {
+		t.Fatalf("unmarshaling job args: %v", err)
+	}
+	if args.SongID != song.ID {
+		t.Errorf("queued SongID = %d, want %d", args.SongID, song.ID)
+	}
+}
+
+func TestAdminTriggerDigestSongReturns404ForUnknownTitle(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+	jobClient := testJobClient(t)
+
+	r := NewRouter(config.Config{}, q, jobClient)
+	rec := doAdminFormRequest(r, http.MethodPost, "/admin/tools/digest-song", token, url.Values{"title": {"Not A Real Song"}})
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /admin/tools/digest-song status = %d, want 404", rec.Code)
 	}
 }
 

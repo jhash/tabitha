@@ -15,6 +15,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jhash/tabitha/internal/auth"
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/jobs"
@@ -122,7 +123,11 @@ func runJobs(cfg config.Config, args []string) error {
 			return fmt.Errorf("usage: tabitha jobs enqueue [toc-sync]")
 		}
 		return withPool(cfg, func(ctx context.Context, pool *pgxpool.Pool) error {
-			client, err := jobs.NewClient(pool, db.New(pool))
+			key, err := auth.ParseEncryptionKey(cfg.TokenEncryptionKey)
+			if err != nil {
+				return fmt.Errorf("parsing TOKEN_ENCRYPTION_KEY: %w", err)
+			}
+			client, err := jobs.NewClient(pool, db.New(pool), cfg, key)
 			if err != nil {
 				return err
 			}
@@ -138,7 +143,11 @@ func runJobs(cfg config.Config, args []string) error {
 		// server (once built) keeps its own River client processing
 		// continuously in the background for the periodic/production case.
 		return withPool(cfg, func(ctx context.Context, pool *pgxpool.Pool) error {
-			client, err := jobs.NewClient(pool, db.New(pool))
+			key, err := auth.ParseEncryptionKey(cfg.TokenEncryptionKey)
+			if err != nil {
+				return fmt.Errorf("parsing TOKEN_ENCRYPTION_KEY: %w", err)
+			}
+			client, err := jobs.NewClient(pool, db.New(pool), cfg, key)
 			if err != nil {
 				return err
 			}
@@ -176,7 +185,12 @@ func serve(cfg config.Config) error {
 
 	queries := db.New(pool)
 
-	jobClient, err := jobs.NewClient(pool, queries)
+	encryptionKey, err := auth.ParseEncryptionKey(cfg.TokenEncryptionKey)
+	if err != nil {
+		return fmt.Errorf("parsing TOKEN_ENCRYPTION_KEY: %w", err)
+	}
+
+	jobClient, err := jobs.NewClient(pool, queries, cfg, encryptionKey)
 	if err != nil {
 		return fmt.Errorf("creating job client: %w", err)
 	}

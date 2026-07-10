@@ -69,33 +69,74 @@ full design doc and implementation plan this tracks against.
       notation edge cases, live-performance UX priorities, and several new
       future-feature ideas). The canonical notation legend Jeff uses is now
       saved at `music/template-song.txt`.
+- [x] Jake's real Google OAuth credentials wired up, logged in, promoted
+      to superadmin — `/admin` etc. all reachable for real now.
+- [x] Added two real transcriptions Jake pulled from Jeff's actual Google
+      Docs (`eye-of-the-tiger.txt`, `great-balls-of-fire.txt`) as parser
+      fixtures — the Satisfaction sample alone wasn't representative.
+      Round-trip (`Parse` → `Render` reproduces the original byte-for-byte)
+      holds on both, confirmed via a new regression test. Concrete gaps in
+      *classification* (not correctness — nothing corrupts) found and
+      logged below.
+
+- [x] `digest_song` implemented for real (was stubbed): `internal/auth`
+      gained `ValidGoogleToken` (fetches the most-recently-stored token,
+      refreshes via the real oauth2 flow if expired, re-persists —
+      tested against a fake token endpoint, not just happy-path
+      assumptions). `internal/jobs` gained the Sheets API call to resolve
+      a title's `google_doc_id` from its cell hyperlink (title column
+      found by header name, same convention as the CSV parser — it isn't
+      necessarily column A) and the Docs API call to fetch content,
+      flattened to plain text and run through the existing parser.
+      `/admin/tools` got a "Digest song" form (exact title match) so a
+      single song can be tested without running the whole catalog.
+      Doesn't yet handle the multi-key-per-doc case (Eye of the Tiger) —
+      stores the doc's full text as one version; splitting on Jeff's
+      page-break-separated keys is still open, see below. Unit-tested
+      (hyperlink extraction, doc-ID parsing, plain-text flattening, error
+      paths); the actual Sheets/Docs API happy path was verified manually
+      against Great Balls of Fire rather than mocked, per Jake's own
+      "digest one specific song" test plan.
 
 ## In progress / next up
 
+- [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
+- [ ] Splitting a multi-key doc (Eye of the Tiger's Gm-then-Cm pattern)
+      into separate `transcription_versions` rows on the page break —
+      `digest_song` currently stores the whole doc as one version
+- [ ] Sitemap + per-page meta tags
+
+## Explicitly paused (Jake's call, 2026-07-10) — not abandoned
+
 - [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
       placeholder at `/songs/{id}/edit`
-- [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
-
-## Blocked on Jake's Google login
-
-Inline edit affordances are buildable and testable now the same way /admin
-itself was: a hand-constructed session bypassing real OAuth. What's
-actually blocked on Jake's own Google credentials existing:
-
-- [ ] Real Sheets API hyperlink extraction (`google_doc_id` per song) + real
-      Docs fetch in `digest_song`, using the stored OAuth token. ntfy push on
-      re-auth needed.
-- [ ] First full catalog digestion — then revisit the block parser against
-      whatever real formatting variety shows up (expected; see design doc).
-      Known in advance from Jeff's notes: a single doc can contain more
-      than one key's transcription, separated by a page break (his
-      transpose workflow) — digestion needs to detect that and split into
-      multiple `transcription_versions` rows, not assume one doc = one
-      version. See `docs/jeff-domain-notes.md`.
-- [ ] ProseMirror editor, schema finalized against the confirmed real-world range
-- [ ] Cloudflare CDN + auto-purge on song change
-- [ ] Sitemap + per-page meta tags
 - [ ] Monitoring/SLO dashboards for the <100ms public-render target
+- [ ] Cloudflare CDN + auto-purge on song change
+
+### Parser classification gaps found against the two new real fixtures
+
+Round-trip is safe on both (see Done above) — these are about the parser
+producing richer structure, not fixing corruption:
+
+- Section headers with real content on the *same* line get missed and
+  fall back to an opaque `TextLine` (safe, just unstructured): e.g.
+  `INTRO:  /G  | Gm  (F)  Gm  (F)  Gm  (Bb/D)  Eb | x4  Gm` and
+  `OUTRO: x4 ish` (Eye of the Tiger), `INSTRUMENTAL:  C  F  G  F  C  x2  C
+  Wellllll` (Great Balls of Fire). Current `sectionHeaderRe` requires the
+  colon to be the last character on the line.
+- Section headers with a lowercase letter suffix don't match:
+  `VERSE 1a:` — `sectionHeaderRe`'s char class doesn't allow lowercase.
+- Multi-word parenthesized chord groups (space inside the parens) don't
+  get recognized as a single chord-line token, since tokenization splits
+  on whitespace first: `(/F /F /F#  G)`, `(/G /A /B /C)`.
+- A line combining multiple repeat-references plus new content misses
+  entirely: `(CHORUS)   (VERSE 3)                END: (C) (C) (C)` — falls
+  back to opaque `TextLine`. Note `(VERSE 3)` references a *specific*
+  earlier verse, not just "the chorus" — repeat-reference resolution
+  eventually needs to target arbitrary earlier sections, not just chorus.
+
+Revisit once real digestion exists and there's a bigger, real sample to
+tune against — fixing these against just two files risks overfitting.
 
 ## Known oddities in the real data (observed during the toc_sync smoke test)
 
