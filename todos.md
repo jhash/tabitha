@@ -17,27 +17,47 @@ full design doc and implementation plan this tracks against.
 - [x] River job queue wired (`toc_sync` working end-to-end against Jeff's
       **real live sheet** — 1,925 songs pulled into local `tabitha_dev`;
       `digest_song` stubbed pending OAuth)
+- [x] Base SSR layout: Roux-derived reset, self-hosted Lora (no FOUT), htmx boost
+- [x] Home page: sortable songs table
+- [x] Song show page rendering (monospace chord/lyric blocks)
+- [x] `gh repo create tabitha --public` + push (renamed the pre-existing
+      2017 `jhash/tabitha` — a PhantomJS e-chords/Ultimate-Guitar scraper —
+      to `tabitha-chord-scraper` first; see Future features below, it's
+      relevant to the scraping TODO)
+- [x] goth Google OAuth wired (provider registered only when
+      `GOOGLE_KEY`/`GOOGLE_SECRET` are set; explicit `email`, `profile`,
+      `drive.readonly` scopes) + `/admin` gated behind `RequireSuperadmin`
+      (404, not 403, on failure) — real login still blocked on Jake's own
+      Google credentials existing in `.env` (Task 23)
+- [x] Fixed a real cross-process test-isolation bug: several packages'
+      integration tests share one `tabitha_test` Postgres database, and
+      `go test ./...` runs packages in parallel OS processes by default.
+      Concurrent `TRUNCATE`s could deadlock, and the migrate up/down
+      round-trip test was dropping every table out from under other
+      packages mid-run. Fixed with a transaction-scoped advisory lock
+      around each TRUNCATE, moved the destructive migrate test to its own
+      `tabitha_test_migrate` database, and documented `go test -p 1 ./...`
+      as the required way to run the full suite (see README).
 
 ## In progress / next up
 
-- [ ] Base SSR layout: Roux-derived reset, self-hosted Lora (no FOUT), htmx boost
-- [ ] Home page: sortable songs table
-- [ ] Song show page rendering (monospace chord/lyric blocks)
-- [ ] goth Google OAuth scaffold + `/admin` gating (routes only — no real
-      consent flow until Jake logs in)
-- [ ] Superadmin CLI promote command + docs
+- [ ] Superadmin CLI promote command + docs + `/admin/users` UI
+- [ ] `/admin/tools` UI to trigger ingestion
+- [ ] Inline admin edit/add affordances on public pages
 - [ ] Dockerfile + verify both run modes
 - [ ] `/healthz`
-- [ ] README + agentic docs
+- [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
 
 ## Blocked on Jake's Google login
+
+Everything above (`/admin/users`, `/admin/tools`, inline edit affordances) is
+buildable and testable now the same way `/admin` itself was: a
+hand-constructed session bypassing real OAuth. What's actually blocked on
+Jake's own Google credentials existing:
 
 - [ ] Real Sheets API hyperlink extraction (`google_doc_id` per song) + real
       Docs fetch in `digest_song`, using the stored OAuth token. ntfy push on
       re-auth needed.
-- [ ] `/admin/tools` UI to trigger ingestion
-- [ ] `/admin/users` UI to promote superadmins
-- [ ] Inline admin edit/add affordances on public pages
 - [ ] First full catalog digestion — then revisit the block parser against
       whatever real formatting variety shows up (expected; see design doc)
 - [ ] ProseMirror editor, schema finalized against the confirmed real-world range
