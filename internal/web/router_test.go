@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,34 @@ import (
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 )
+
+// superadminSession creates and promotes a user, returning a session token
+// that RequireSuperadmin will accept.
+func superadminSession(t *testing.T, q *db.Queries) (token string, user db.User) {
+	t.Helper()
+	ctx := context.Background()
+
+	user, err := q.FindOrCreateUser(ctx, db.FindOrCreateUserParams{Email: "jhash147@gmail.com", Name: "Jake"})
+	if err != nil {
+		t.Fatalf("FindOrCreateUser() error = %v", err)
+	}
+	if _, err := q.PromoteToSuperadmin(ctx, user.Email); err != nil {
+		t.Fatalf("PromoteToSuperadmin() error = %v", err)
+	}
+	token, _, err = auth.CreateSession(ctx, q, user.ID)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+	return token, user
+}
+
+func doAdminRequest(r http.Handler, method, path, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	return rec
+}
 
 func fakeGoogleConfig() config.Config {
 	return config.Config{
@@ -133,5 +162,64 @@ func TestAuthLogoutClearsSessionCookieAndServerSideSession(t *testing.T) {
 
 	if _, err := auth.CurrentUser(ctx, q, token); err == nil {
 		t.Error("session was still valid server-side after logout")
+	}
+}
+
+func TestAdminUsersRouteServesPageForSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q)
+	rec := doAdminRequest(r, http.MethodGet, "/admin/users", token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/users status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "jhash147@gmail.com") {
+		t.Errorf("expected the page to list the seeded user, got: %s", rec.Body.String())
+	}
+}
+
+func TestAdminPromoteUserPromotesAndRedirects(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, _ := superadminSession(t, q)
+
+	target, err := q.FindOrCreateUser(ctx, db.FindOrCreateUserParams{Email: "jeff@example.com", Name: "Jeff"})
+	if err != nil {
+		t.Fatalf("FindOrCreateUser() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q)
+	rec := doAdminRequest(r, http.MethodPost, fmt.Sprintf("/admin/users/%d/promote", target.ID), token)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("POST /admin/users/%d/promote status = %d, want 302", target.ID, rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/users" {
+		t.Errorf("Location = %q, want /admin/users", loc)
+	}
+
+	got, err := q.GetUserByEmail(ctx, "jeff@example.com")
+	if err != nil {
+		t.Fatalf("GetUserByEmail() error = %v", err)
+	}
+	if got.Role != db.UserRoleSuperadmin {
+		t.Errorf("Role = %v, want superadmin after promotion", got.Role)
+	}
+}
+
+func TestAdminPromoteUserReturns404ForUnknownID(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q)
+	rec := doAdminRequest(r, http.MethodPost, "/admin/users/999999/promote", token)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /admin/users/999999/promote status = %d, want 404", rec.Code)
 	}
 }

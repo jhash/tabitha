@@ -9,14 +9,15 @@ import (
 	"github.com/jhash/tabitha/internal/auth"
 )
 
-// AdminHomeHandler is a placeholder landing page behind RequireSuperadmin.
-// Tasks 11/12 add real content (user promotion, ingestion triggers) here.
+// AdminHomeHandler is the admin landing page behind RequireSuperadmin.
+// Task 12 adds an ingestion-trigger section here.
 func AdminHomeHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
 	page := Page("Admin", "tabitha admin", nil,
 		Div(
 			H1(g.Text("Admin")),
 			P(g.Text("Signed in as "+user.Email)),
+			P(A(Href("/admin/users"), g.Text("Manage users"))),
 			A(Href("/auth/logout"), g.Text("Log out")),
 		),
 	)

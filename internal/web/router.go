@@ -33,6 +33,8 @@ func NewRouter(cfg config.Config, q *db.Queries) http.Handler {
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(auth.RequireSuperadmin(q))
 		r.Get("/", AdminHomeHandler)
+		r.Get("/users", AdminUsersHandler(q))
+		r.Post("/users/{id}/promote", AdminPromoteUserHandler(q))
 	})
 
 	return r
