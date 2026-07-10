@@ -42,7 +42,7 @@ func setupTestQueries(t *testing.T) *db.Queries {
 	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(72469)"); err != nil {
 		t.Fatalf("acquiring test db truncate lock: %v", err)
 	}
-	if _, err := tx.Exec(ctx, "TRUNCATE songs, transcription_versions, users RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := tx.Exec(ctx, "TRUNCATE songs, transcription_versions, users, artists, genres RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncating test db: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

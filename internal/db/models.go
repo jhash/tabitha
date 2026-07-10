@@ -53,6 +53,20 @@ func (ns NullUserRole) Value() (driver.Value, error) {
 	return string(ns.UserRole), nil
 }
 
+type Artist struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Genre struct {
+	ID        int64              `json:"id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type GoogleOauthToken struct {
 	ID                    int64              `json:"id"`
 	UserID                int64              `json:"user_id"`
@@ -88,6 +102,12 @@ type Song struct {
 	AddedByUserID    *int64             `json:"added_by_user_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ArtistID         *int64             `json:"artist_id"`
+}
+
+type SongGenre struct {
+	SongID  int64 `json:"song_id"`
+	GenreID int64 `json:"genre_id"`
 }
 
 type TranscriptionVersion struct {

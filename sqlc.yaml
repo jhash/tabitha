@@ -6,6 +6,7 @@ sql:
       - migrations/0003_transcription_versions.up.sql
       - migrations/0004_sessions.up.sql
       - migrations/0005_google_oauth_tokens.up.sql
+      - migrations/0006_artists_genres.up.sql
     queries: internal/db/queries
     engine: postgresql
     gen:

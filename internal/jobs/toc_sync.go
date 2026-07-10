@@ -70,11 +70,46 @@ func (w *TocSyncWorker) Work(ctx context.Context, job *river.Job[TocSyncArgs]) e
 	}
 
 	for _, row := range rows {
-		if _, err := w.Queries.UpsertSongFromTOC(ctx, row); err != nil {
+		song, err := w.Queries.UpsertSongFromTOC(ctx, row)
+		if err != nil {
 			return fmt.Errorf("toc_sync: upserting %q by %q: %w", row.Title, row.Artist, err)
+		}
+		if err := w.linkArtistAndGenre(ctx, song, row); err != nil {
+			return fmt.Errorf("toc_sync: linking artist/genre for %q: %w", row.Title, err)
 		}
 	}
 
+	return nil
+}
+
+// linkArtistAndGenre normalizes the sheet's free-text ARTIST/GENRE columns
+// into the artists/genres tables, best-effort. songs.artist/songs.genre
+// stay the source of truth for display and the TOC dedup key — these are
+// derived links, re-derived on every sync so a changed genre in the sheet
+// doesn't leave a stale link behind.
+func (w *TocSyncWorker) linkArtistAndGenre(ctx context.Context, song db.Song, row db.UpsertSongFromTOCParams) error {
+	if row.Artist != "" {
+		artist, err := w.Queries.FindOrCreateArtist(ctx, row.Artist)
+		if err != nil {
+			return fmt.Errorf("finding/creating artist %q: %w", row.Artist, err)
+		}
+		if err := w.Queries.SetSongArtistID(ctx, db.SetSongArtistIDParams{ID: song.ID, ArtistID: &artist.ID}); err != nil {
+			return fmt.Errorf("setting artist_id: %w", err)
+		}
+	}
+
+	if err := w.Queries.ClearSongGenres(ctx, song.ID); err != nil {
+		return fmt.Errorf("clearing prior genre links: %w", err)
+	}
+	if row.Genre != "" {
+		genre, err := w.Queries.FindOrCreateGenre(ctx, row.Genre)
+		if err != nil {
+			return fmt.Errorf("finding/creating genre %q: %w", row.Genre, err)
+		}
+		if err := w.Queries.LinkSongGenre(ctx, db.LinkSongGenreParams{SongID: song.ID, GenreID: genre.ID}); err != nil {
+			return fmt.Errorf("linking genre: %w", err)
+		}
+	}
 	return nil
 }
 
