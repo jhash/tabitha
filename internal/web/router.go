@@ -20,6 +20,7 @@ func NewRouter(q *db.Queries) http.Handler {
 	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 
 	r.Get("/", HomeHandler(q))
+	r.Get("/songs/{id}", SongShowHandler(q))
 
 	return r
 }

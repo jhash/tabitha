@@ -23,30 +23,30 @@ const (
 // Token is one element of a ChordLyricPair/ChordOnlyLine's content stream.
 // Exactly one of Chord or Text is set.
 type Token struct {
-	Chord string
-	Text  string
+	Chord string `json:"chord,omitempty"`
+	Text  string `json:"text,omitempty"`
 
 	// Synthetic marks a Text token as alignment padding we invented (the
 	// chord line extends further right than the real lyric text), rather
 	// than characters that actually appeared in the source lyric line. Its
 	// length still counts toward chord-column math, but it's excluded when
 	// reconstructing the lyric line itself.
-	Synthetic bool
+	Synthetic bool `json:"synthetic,omitempty"`
 }
 
 // Block is one unit of a parsed transcription, in document order.
 type Block struct {
-	Kind BlockKind
+	Kind BlockKind `json:"kind"`
 
 	// Text holds the verbatim line content for SectionHeader and TextLine.
-	Text string
+	Text string `json:"text,omitempty"`
 
 	// Tokens holds the interleaved chord/text stream for ChordLyricPair and
 	// ChordOnlyLine.
-	Tokens []Token
+	Tokens []Token `json:"tokens,omitempty"`
 
 	// Annotation holds any trailing content on a chord line that isn't
 	// itself chord-shaped (e.g. "3rd x: Girl reaction"), captured verbatim
 	// including its leading whitespace so it round-trips exactly.
-	Annotation string
+	Annotation string `json:"annotation,omitempty"`
 }
