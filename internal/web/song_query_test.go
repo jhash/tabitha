@@ -89,6 +89,46 @@ func equalInt64s(a, b []int64) bool {
 	return true
 }
 
+func TestListSongsQueryReportsHasVersion(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	undigested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Undigested"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	digested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Digested"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: digested.ID, Kind: "primary", Source: "google_doc_scrape", RawText: "x", Content: []byte("[]"),
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: digested.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "title"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2", len(rows))
+	}
+	for _, r := range rows {
+		if r.Title == "Undigested" && r.HasVersion {
+			t.Errorf("Undigested song HasVersion = true, want false")
+		}
+		if r.Title == "Digested" && !r.HasVersion {
+			t.Errorf("Digested song HasVersion = false, want true")
+		}
+	}
+	_ = undigested
+}
+
 func TestListSongsQueryFiltersByStatus(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()

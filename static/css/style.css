@@ -120,6 +120,15 @@ th {
   white-space: nowrap;
 }
 
+/* Not-yet-digested songs — grayed out until a transcription exists. */
+tr.no-version {
+  color: var(--color-muted);
+}
+
+tr.no-version a {
+  color: var(--color-muted);
+}
+
 th a {
   text-decoration: none;
 }

@@ -81,6 +81,7 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 				s.id, s.title, s.artist, s.status,
 				u.name AS added_by_name, u.email AS added_by_email,
 				s.created_at, s.updated_at,
+				(s.current_version_id IS NOT NULL) AS has_version,
 				coalesce(string_agg(DISTINCT g.name, ', '), '') AS genres
 			FROM songs s
 			LEFT JOIN users u ON u.id = s.added_by_user_id
@@ -109,7 +110,7 @@ func ListSongsQuery(ctx context.Context, dbtx db.DBTX, p SongQueryParams) ([]Son
 	for rows.Next() {
 		var s SongRow
 		var addedByName, addedByEmail, genres *string
-		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &genres); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &s.HasVersion, &genres); err != nil {
 			return nil, fmt.Errorf("scanning song row: %w", err)
 		}
 		s.AddedByName = deref(addedByName)

@@ -22,6 +22,7 @@ type SongRow struct {
 	AddedByEmail string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+	HasVersion   bool
 }
 
 var sortColumns = []string{"title", "artist", "updated", "added", "status", "added_by"}
@@ -183,6 +184,7 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 		TBody(
 			g.Map(songs, func(s SongRow) g.Node {
 				return Tr(
+					g.If(!s.HasVersion, Class("no-version")),
 					Td(A(Href(fmt.Sprintf("/songs/%d", s.ID)), g.Text(s.Title))),
 					Td(g.Text(s.Artist)),
 					Td(g.Text(s.Status)),
