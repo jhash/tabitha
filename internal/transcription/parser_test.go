@@ -161,6 +161,26 @@ func TestParseFullSatisfactionFileRoundTrips(t *testing.T) {
 	}
 }
 
+// TestParseRealFixturesRoundTrip guards against regressions on real docs
+// pulled straight from Jeff's Google Docs (not hand-written test input).
+// Eye of the Tiger also exercises his transpose workflow: one doc holding
+// two full transcriptions (Gm then Cm) separated by a page break — Parse
+// doesn't need to understand that structure (splitting a multi-key doc
+// into separate versions is a digestion-time concern, not a parser one),
+// it just needs to not corrupt the text.
+func TestParseRealFixturesRoundTrip(t *testing.T) {
+	for _, name := range []string{"eye-of-the-tiger.txt", "great-balls-of-fire.txt"} {
+		t.Run(name, func(t *testing.T) {
+			raw := readFixture(t, name)
+			blocks := Parse(raw)
+			rendered := Render(blocks)
+			if rendered != raw {
+				t.Errorf("round-trip mismatch.\n--- got ---\n%s\n--- want ---\n%s", rendered, raw)
+			}
+		})
+	}
+}
+
 func endsWith(s, suffix string) bool {
 	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
 }
