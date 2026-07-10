@@ -5,16 +5,24 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
+	"golang.org/x/time/rate"
 
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 )
+
+// digestSongRateLimit keeps combined Sheets+Docs API calls comfortably
+// under Google's default 60-reads/minute-per-user quota (confirmed hit
+// running a 50-song batch through /admin/tools), shared across every
+// digest_song job this process runs rather than per-job.
+const digestSongRateLimit = 45
 
 // MigrateUp applies River's own schema migrations (its job/queue tables),
 // separate from tabitha's application schema in the top-level migrations
@@ -34,9 +42,11 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 // encryptionKey may be nil wherever DigestSongWorker is never exercised
 // (e.g. `jobs enqueue toc-sync`, which only ever touches TocSyncWorker).
 func NewClient(pool *pgxpool.Pool, queries *db.Queries, cfg config.Config, encryptionKey []byte) (*river.Client[pgx.Tx], error) {
+	rateLimiter := rate.NewLimiter(rate.Every(time.Minute/digestSongRateLimit), 1)
+
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &TocSyncWorker{Queries: queries})
-	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey})
+	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey, RateLimiter: rateLimiter})
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{

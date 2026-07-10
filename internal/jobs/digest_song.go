@@ -8,6 +8,7 @@ import (
 	"github.com/riverqueue/river"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"golang.org/x/time/rate"
 	"google.golang.org/api/docs/v1"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
@@ -31,6 +32,22 @@ type DigestSongWorker struct {
 	Queries       *db.Queries
 	Config        config.Config
 	EncryptionKey []byte
+
+	// RateLimiter throttles Sheets/Docs API calls to stay under Google's
+	// default 60-reads/minute-per-user quota even when many digest_song
+	// jobs run back to back (e.g. the batch trigger on /admin/tools).
+	// Shared across every job this worker instance runs — River runs one
+	// worker instance per queue slot, so this is process-wide, not
+	// per-job. Nil-safe: a nil limiter (e.g. in tests that never reach
+	// the API calls) just skips throttling.
+	RateLimiter *rate.Limiter
+}
+
+func (w *DigestSongWorker) wait(ctx context.Context) error {
+	if w.RateLimiter == nil {
+		return nil
+	}
+	return w.RateLimiter.Wait(ctx)
 }
 
 // ErrNoOAuthToken means no superadmin has logged in via Google yet (or the
@@ -57,7 +74,7 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 	if docID == "" {
 		docID, err = w.findGoogleDocID(ctx, token, song.Title)
 		if err != nil {
-			return fmt.Errorf("digest_song: finding google doc id for %q: %w", song.Title, err)
+			return snoozeOnRateLimit(fmt.Errorf("digest_song: finding google doc id for %q: %w", song.Title, err))
 		}
 		if err := w.Queries.SetSongGoogleDocID(ctx, db.SetSongGoogleDocIDParams{ID: song.ID, GoogleDocID: docID}); err != nil {
 			return fmt.Errorf("digest_song: storing google doc id: %w", err)
@@ -66,7 +83,7 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 
 	rawText, err := w.fetchDocText(ctx, token, docID)
 	if err != nil {
-		return fmt.Errorf("digest_song: fetching doc content: %w", err)
+		return snoozeOnRateLimit(fmt.Errorf("digest_song: fetching doc content: %w", err))
 	}
 
 	blocks := transcription.Parse(rawText)
@@ -99,6 +116,9 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 }
 
 func (w *DigestSongWorker) findGoogleDocID(ctx context.Context, token *oauth2.Token, title string) (string, error) {
+	if err := w.wait(ctx); err != nil {
+		return "", fmt.Errorf("waiting for rate limiter: %w", err)
+	}
 	svc, err := sheets.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
 		return "", fmt.Errorf("building sheets client: %w", err)
@@ -115,6 +135,9 @@ func (w *DigestSongWorker) findGoogleDocID(ctx context.Context, token *oauth2.To
 }
 
 func (w *DigestSongWorker) fetchDocText(ctx context.Context, token *oauth2.Token, docID string) (string, error) {
+	if err := w.wait(ctx); err != nil {
+		return "", fmt.Errorf("waiting for rate limiter: %w", err)
+	}
 	svc, err := docs.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
 	if err != nil {
 		return "", fmt.Errorf("building docs client: %w", err)
