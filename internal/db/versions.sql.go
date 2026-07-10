@@ -89,6 +89,37 @@ func (q *Queries) GetTranscriptionVersion(ctx context.Context, id int64) (Transc
 	return i, err
 }
 
+const listAllCurrentVersionIDsAndRawText = `-- name: ListAllCurrentVersionIDsAndRawText :many
+SELECT tv.id, tv.raw_text
+FROM transcription_versions tv
+JOIN songs s ON s.current_version_id = tv.id
+`
+
+type ListAllCurrentVersionIDsAndRawTextRow struct {
+	ID      int64  `json:"id"`
+	RawText string `json:"raw_text"`
+}
+
+func (q *Queries) ListAllCurrentVersionIDsAndRawText(ctx context.Context) ([]ListAllCurrentVersionIDsAndRawTextRow, error) {
+	rows, err := q.db.Query(ctx, listAllCurrentVersionIDsAndRawText)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllCurrentVersionIDsAndRawTextRow
+	for rows.Next() {
+		var i ListAllCurrentVersionIDsAndRawTextRow
+		if err := rows.Scan(&i.ID, &i.RawText); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listVersionsForSong = `-- name: ListVersionsForSong :many
 SELECT id, song_id, kind, source, raw_text, content, key, capo, is_current, created_by, created_at FROM transcription_versions WHERE song_id = $1 ORDER BY created_at DESC
 `
@@ -131,5 +162,22 @@ UPDATE transcription_versions SET is_current = true WHERE id = $1
 
 func (q *Queries) MarkVersionCurrent(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, markVersionCurrent, id)
+	return err
+}
+
+const updateTranscriptionVersionContent = `-- name: UpdateTranscriptionVersionContent :exec
+UPDATE transcription_versions SET content = $2 WHERE id = $1
+`
+
+type UpdateTranscriptionVersionContentParams struct {
+	ID      int64  `json:"id"`
+	Content []byte `json:"content"`
+}
+
+// Re-derives content from the already-stored raw_text after a parser
+// classification improvement — no re-fetch from Google needed since
+// raw_text itself doesn't change, only how it's parsed into blocks.
+func (q *Queries) UpdateTranscriptionVersionContent(ctx context.Context, arg UpdateTranscriptionVersionContentParams) error {
+	_, err := q.db.Exec(ctx, updateTranscriptionVersionContent, arg.ID, arg.Content)
 	return err
 }

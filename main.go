@@ -19,6 +19,7 @@ import (
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/jobs"
+	"github.com/jhash/tabitha/internal/transcription"
 	"github.com/jhash/tabitha/internal/web"
 )
 
@@ -50,8 +51,10 @@ func run(args []string) error {
 		return runPromote(cfg, args[1:])
 	case "healthcheck":
 		return runHealthcheck(cfg)
+	case "reparse":
+		return runReparse(cfg)
 	default:
-		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs, promote, healthcheck)", cmd)
+		return fmt.Errorf("unknown command %q (want: serve, migrate, jobs, promote, healthcheck, reparse)", cmd)
 	}
 }
 
@@ -90,6 +93,33 @@ func runPromote(cfg config.Config, args []string) error {
 			return fmt.Errorf("no user found with email %s (they must log in at least once before they can be promoted)", email)
 		}
 		log.Printf("tabitha: promoted %s to superadmin", email)
+		return nil
+	})
+}
+
+// runReparse re-derives every current transcription version's parsed
+// content from its already-stored raw_text, without re-fetching anything
+// from Google. Meant to be run after a parser classification improvement
+// so the whole catalog picks it up without burning API quota re-digesting
+// from scratch.
+func runReparse(cfg config.Config) error {
+	return withPool(cfg, func(ctx context.Context, pool *pgxpool.Pool) error {
+		q := db.New(pool)
+		versions, err := q.ListAllCurrentVersionIDsAndRawText(ctx)
+		if err != nil {
+			return fmt.Errorf("listing current versions: %w", err)
+		}
+		for _, v := range versions {
+			blocks := transcription.Parse(v.RawText)
+			content, err := transcription.MarshalDocument(blocks)
+			if err != nil {
+				return fmt.Errorf("marshaling parsed content for version %d: %w", v.ID, err)
+			}
+			if err := q.UpdateTranscriptionVersionContent(ctx, db.UpdateTranscriptionVersionContentParams{ID: v.ID, Content: content}); err != nil {
+				return fmt.Errorf("updating content for version %d: %w", v.ID, err)
+			}
+		}
+		log.Printf("tabitha: reparsed %d transcription versions", len(versions))
 		return nil
 	})
 }

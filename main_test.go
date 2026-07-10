@@ -13,6 +13,7 @@ import (
 
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
+	"github.com/jhash/tabitha/internal/transcription"
 )
 
 func testConfig(t *testing.T) config.Config {
@@ -84,6 +85,61 @@ func TestRunPromotePromotesExistingUser(t *testing.T) {
 	}
 	if user.Role != db.UserRoleSuperadmin {
 		t.Errorf("Role = %v, want superadmin", user.Role)
+	}
+}
+
+func TestRunReparseRederivesContentFromRawText(t *testing.T) {
+	cfg := testConfig(t)
+	ctx := context.Background()
+
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		t.Fatalf("connecting: %v", err)
+	}
+	defer pool.Close()
+	q := db.New(pool)
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Reparse Test Song", Artist: "Someone"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	// Stale content as if digested before the lowercase-suffix header fix
+	// landed: "VERSE 1a:" misclassified as an opaque TextLine.
+	rawText := "VERSE 1a:\n"
+	staleBlocks := []transcription.Block{{Kind: transcription.TextLine, Text: "VERSE 1a:"}}
+	staleContent, err := transcription.MarshalDocument(staleBlocks)
+	if err != nil {
+		t.Fatalf("MarshalDocument() error = %v", err)
+	}
+
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: song.ID, Kind: "primary", Source: "google_doc_scrape", RawText: rawText, Content: staleContent,
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: song.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+
+	if err := runReparse(cfg); err != nil {
+		t.Fatalf("runReparse() error = %v", err)
+	}
+
+	updated, err := q.GetTranscriptionVersion(ctx, version.ID)
+	if err != nil {
+		t.Fatalf("GetTranscriptionVersion() error = %v", err)
+	}
+	blocks, err := transcription.UnmarshalDocument(updated.Content)
+	if err != nil {
+		t.Fatalf("UnmarshalDocument() error = %v", err)
+	}
+	if len(blocks) == 0 || blocks[0].Kind != transcription.SectionHeader {
+		t.Errorf("got %+v, want first block to be SectionHeader (reparsed with the current parser)", blocks)
+	}
+	if updated.RawText != rawText {
+		t.Errorf("RawText changed = %q, want unchanged %q", updated.RawText, rawText)
 	}
 }
 
