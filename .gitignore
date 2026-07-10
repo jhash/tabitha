@@ -1,0 +1,8 @@
+/tabitha
+/tmp/
+*.log
+.env
+.DS_Store
+/node_modules/
+/static/dist/
+*.test
