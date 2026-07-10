@@ -90,20 +90,25 @@ full design doc and implementation plan this tracks against.
       flattened to plain text and run through the existing parser.
       `/admin/tools` got a "Digest song" form (exact title match) so a
       single song can be tested without running the whole catalog.
-      Doesn't yet handle the multi-key-per-doc case (Eye of the Tiger) —
-      stores the doc's full text as one version; splitting on Jeff's
-      page-break-separated keys is still open, see below. Unit-tested
-      (hyperlink extraction, doc-ID parsing, plain-text flattening, error
-      paths); the actual Sheets/Docs API happy path was verified manually
-      against Great Balls of Fire rather than mocked, per Jake's own
-      "digest one specific song" test plan.
+      Multi-key-per-doc splitting (Eye of the Tiger) handled separately,
+      see below. Unit-tested (hyperlink extraction, doc-ID parsing,
+      plain-text flattening, error paths); the actual Sheets/Docs API
+      happy path was verified manually against Great Balls of Fire rather
+      than mocked, per Jake's own "digest one specific song" test plan.
+- [x] Multi-key docs (Eye of the Tiger's Gm-then-Cm pattern) handled for
+      real: Jeff doesn't insert an actual Docs API page break, he mashes
+      Enter, so the real delimiter is a long blank-line run (~50 in the
+      real doc, vs. a max of 2 anywhere else) rather than a `PageBreak`
+      structural element — found by inspecting the real fetched doc after
+      a naive PageBreak-based split did nothing. `digest_song` now splits
+      on that and keeps only the last section (the original key),
+      discarding the transposed copy on top per Jake's call, rather than
+      storing both as separate versions. Verified against the real doc:
+      stored version dropped from 154 lines (both keys) to 53 (Cm only).
 
 ## In progress / next up
 
 - [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
-- [ ] Splitting a multi-key doc (Eye of the Tiger's Gm-then-Cm pattern)
-      into separate `transcription_versions` rows on the page break —
-      `digest_song` currently stores the whole doc as one version
 - [ ] Sitemap + per-page meta tags
 
 ## Explicitly paused (Jake's call, 2026-07-10) — not abandoned
