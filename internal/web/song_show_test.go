@@ -96,6 +96,24 @@ func TestSongShowOmitsDuplicateTitleAndBylineFromTranscription(t *testing.T) {
 	}
 }
 
+func TestSongShowOmitsDuplicateBylineWithExtraInternalWhitespace(t *testing.T) {
+	// Real bug: "(I Love You) For Sentimental Reasons" still showed the
+	// byline twice because the doc's own line has two spaces after the
+	// colon ("As performed by:  Nat King Cole") — an exact-match compare
+	// missed it.
+	blocks := []transcription.Block{
+		{Kind: transcription.TextLine, Text: "(I Love You) For Sentimental Reasons"},
+		{Kind: transcription.TextLine, Text: "As performed by:  Nat King Cole"},
+		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
+	}
+	song := db.Song{Title: "(I Love You) For Sentimental Reasons", Artist: "Nat King Cole"}
+	html := renderSongShow(t, song, blocks, true, false)
+
+	if strings.Count(html, "Nat King Cole") != 1 {
+		t.Errorf("want \"Nat King Cole\" to appear exactly once, got %d times: %s", strings.Count(html, "Nat King Cole"), html)
+	}
+}
+
 func TestSongShowKeepsTranscriptionWhenFirstLinesDontMatchTitleArtist(t *testing.T) {
 	// Don't trim anything if the doc doesn't actually start with the
 	// title/artist lines — some digested docs might not follow the

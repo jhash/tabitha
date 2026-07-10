@@ -103,5 +103,13 @@ func omitDuplicateTitleByline(blocks []transcription.Block, song db.Song) []tran
 }
 
 func isDuplicateLine(b transcription.Block, want string) bool {
-	return b.Kind == transcription.TextLine && strings.EqualFold(strings.TrimSpace(b.Text), strings.TrimSpace(want))
+	return b.Kind == transcription.TextLine && strings.EqualFold(normalizeWhitespace(b.Text), normalizeWhitespace(want))
+}
+
+// normalizeWhitespace collapses runs of whitespace to a single space and
+// trims the ends — Jeff's docs aren't consistent about how many spaces
+// follow "As performed by:", so an exact-match compare misses real
+// duplicates (see TestSongShowOmitsDuplicateBylineWithExtraInternalWhitespace).
+func normalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
