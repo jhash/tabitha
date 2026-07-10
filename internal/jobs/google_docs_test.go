@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"strings"
 	"testing"
 
 	"google.golang.org/api/docs/v1"
@@ -163,5 +164,55 @@ func TestDocTextFromGoogleDocSkipsNonTextStructuralElements(t *testing.T) {
 func TestDocTextFromGoogleDocHandlesNilBody(t *testing.T) {
 	if got := docTextFromGoogleDoc(&docs.Document{}); got != "" {
 		t.Errorf("got %q, want empty string", got)
+	}
+}
+
+func TestDocSectionsFromGoogleDocSplitsOnLongBlankRun(t *testing.T) {
+	// Jeff doesn't use a real "insert page break" — he mashes Enter to push
+	// the original key to a new page. Confirmed against the real Eye of the
+	// Tiger doc: ~50 consecutive blank lines at the real gap, vs. a max of
+	// 2 in a row anywhere else in either real fixture doc. So a long blank
+	// run (not any single blank line, which separates verses normally) is
+	// the actual delimiter.
+	text := "new key\n" + strings.Repeat("\n", 6) + "original key\n"
+	got := docSectionsFromText(text)
+	// The discarded (new-key) section's exact trailing whitespace doesn't
+	// matter — only the kept section (last, see originalKeySection) needs
+	// to round-trip cleanly through the parser.
+	want := []string{"new key", "original key\n"}
+	if len(got) != len(want) {
+		t.Fatalf("got %d sections %q, want %d %q", len(got), got, len(want), want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("section %d: got %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestDocSectionsFromTextIgnoresNormalBlankLines(t *testing.T) {
+	text := "verse one\n\nverse two\n\nverse three\n"
+	got := docSectionsFromText(text)
+	if len(got) != 1 || got[0] != text {
+		t.Errorf("got %q, want one section %q", got, text)
+	}
+}
+
+func TestDocSectionsFromTextHandlesEmptyString(t *testing.T) {
+	got := docSectionsFromText("")
+	if len(got) != 1 || got[0] != "" {
+		t.Errorf("got %q, want one empty section", got)
+	}
+}
+
+func TestOriginalKeySectionReturnsLastSection(t *testing.T) {
+	if got := originalKeySection([]string{"new key\n", "original key\n"}); got != "original key\n" {
+		t.Errorf("got %q, want %q", got, "original key\n")
+	}
+}
+
+func TestOriginalKeySectionHandlesSingleSection(t *testing.T) {
+	if got := originalKeySection([]string{"only key\n"}); got != "only key\n" {
+		t.Errorf("got %q, want %q", got, "only key\n")
 	}
 }

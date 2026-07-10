@@ -37,11 +37,11 @@ type DigestSongWorker struct {
 // stored token can no longer be refreshed) — see design doc Phase 2.
 var ErrNoOAuthToken = errors.New("digest_song: no usable Google OAuth token on file; log in at /auth/google first")
 
-// Work does not yet handle Jeff's transpose workflow, where a single doc
-// holds more than one key's transcription separated by a page break (see
-// docs/jeff-domain-notes.md) — it stores the doc's full text as one
-// version. Splitting on the page break is a deliberately separate,
-// not-yet-built step.
+// Work handles Jeff's transpose workflow: a doc may hold more than one
+// key's transcription separated by a page break (see
+// docs/jeff-domain-notes.md). Only the original key's section — the last
+// one — is kept; the transposed copy on top is discarded rather than
+// stored as a second version, per Jake's call.
 func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongArgs]) error {
 	song, err := w.Queries.GetSongByID(ctx, job.Args.SongID)
 	if err != nil {
@@ -123,5 +123,5 @@ func (w *DigestSongWorker) fetchDocText(ctx context.Context, token *oauth2.Token
 	if err != nil {
 		return "", fmt.Errorf("fetching doc %s: %w", docID, err)
 	}
-	return docTextFromGoogleDoc(doc), nil
+	return originalKeySection(docSectionsFromGoogleDoc(doc)), nil
 }

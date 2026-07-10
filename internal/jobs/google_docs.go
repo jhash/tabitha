@@ -83,3 +83,36 @@ func docTextFromGoogleDoc(doc *docs.Document) string {
 	}
 	return b.String()
 }
+
+// blankRunSplitRe matches a run of at least 6 blank lines. Jeff's
+// transpose workflow doesn't use a real "insert page break" — he just
+// mashes Enter to push the original key onto a new page — so the visible
+// gap shows up as one long run of blank lines, not a PageBreak structural
+// element. Confirmed against the real Eye of the Tiger doc: ~50
+// consecutive blank lines at the actual gap vs. a max of 2 in a row
+// anywhere else in either real fixture doc, so 6 has a wide margin against
+// false splits on ordinary verse spacing.
+var blankRunSplitRe = regexp.MustCompile(`\n{7,}`)
+
+// docSectionsFromText splits flattened doc text on Jeff's transpose-
+// workflow page gap. A doc with no such gap is a single section. Always
+// returns at least one element (possibly empty), so callers never need a
+// length check.
+func docSectionsFromText(text string) []string {
+	return blankRunSplitRe.Split(text, -1)
+}
+
+// docSectionsFromGoogleDoc splits a doc's flattened text on Jeff's
+// transpose-workflow page gap (see docSectionsFromText).
+func docSectionsFromGoogleDoc(doc *docs.Document) []string {
+	return docSectionsFromText(docTextFromGoogleDoc(doc))
+}
+
+// originalKeySection returns the section holding the original key's
+// transcription. Per Jeff, the original key follows the new key after the
+// page break, so it's the last section — confirmed with Jake rather than
+// assumed (see docs/jeff-domain-notes.md). Docs with no page break have
+// exactly one section, which is trivially "original."
+func originalKeySection(sections []string) string {
+	return sections[len(sections)-1]
+}
