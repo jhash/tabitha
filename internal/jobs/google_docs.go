@@ -60,12 +60,13 @@ func findHyperlinkForTitle(spreadsheet *sheets.Spreadsheet, title string) (strin
 
 // docTextFromGoogleDoc flattens a fetched Google Doc into plain text.
 // Paragraph TextRun content already includes the paragraph's trailing
-// newline (a Docs API convention), so this is just concatenation — no
+// newline (a Docs API convention), so this is mostly concatenation — no
 // non-text structural element (page breaks, section breaks, tables)
-// contributes any text of its own. Detecting Jeff's transpose-workflow
-// page break to split one doc into multiple transcription_versions rows
-// is future digestion-level work (see docs/jeff-domain-notes.md), not
-// this function's job.
+// contributes any text of its own. One exception: a soft line break
+// (Shift+Enter, used to group e.g. a chord line with its lyric line
+// within one paragraph) comes through as a literal \v (0x0B), which
+// browsers don't render as a line break — confirmed against the real
+// "Don't Stop Believin'" doc, translated to \n here.
 func docTextFromGoogleDoc(doc *docs.Document) string {
 	if doc.Body == nil {
 		return ""
@@ -81,7 +82,7 @@ func docTextFromGoogleDoc(doc *docs.Document) string {
 			}
 		}
 	}
-	return b.String()
+	return strings.ReplaceAll(b.String(), "\v", "\n")
 }
 
 // blankRunSplitRe matches a run of at least 6 blank lines. Jeff's

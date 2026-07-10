@@ -167,6 +167,29 @@ func TestDocTextFromGoogleDocHandlesNilBody(t *testing.T) {
 	}
 }
 
+func TestDocTextFromGoogleDocConvertsSoftLineBreaksToNewlines(t *testing.T) {
+	// Confirmed against the real "Don't Stop Believin'" doc: a soft line
+	// break (Shift+Enter, grouping chord/lyric lines within one paragraph)
+	// comes through as a literal \v (0x0B) inside TextRun.Content, not \n.
+	// Left untranslated, browsers don't render \v as a line break, so
+	// everything glues onto one visual line.
+	doc := &docs.Document{
+		Body: &docs.Body{
+			Content: []*docs.StructuralElement{
+				{Paragraph: &docs.Paragraph{Elements: []*docs.ParagraphElement{
+					{TextRun: &docs.TextRun{Content: "VERSE 1:\vE   B\v  lyric line\v\n"}},
+				}}},
+			},
+		},
+	}
+
+	got := docTextFromGoogleDoc(doc)
+	want := "VERSE 1:\nE   B\n  lyric line\n\n"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestDocSectionsFromGoogleDocSplitsOnLongBlankRun(t *testing.T) {
 	// Jeff doesn't use a real "insert page break" — he mashes Enter to push
 	// the original key to a new page. Confirmed against the real Eye of the
