@@ -40,6 +40,52 @@ func TestParseSectionHeaderWithNumberAndHyphen(t *testing.T) {
 	}
 }
 
+func TestParseSectionHeaderWithLowercaseSuffix(t *testing.T) {
+	// Found running the real catalog through digestion: Jeff labels
+	// alternate-lyric verses "VERSE 1a:", "VERSE 1b:", etc.
+	for _, header := range []string{"VERSE 1a:", "VERSE 2b:"} {
+		blocks := Parse(header + "\n")
+		if blocks[0].Kind != SectionHeader {
+			t.Errorf("Parse(%q)[0].Kind = %v, want SectionHeader", header, blocks[0].Kind)
+		}
+	}
+}
+
+func TestParseMultiWordParenChordGroupIsChordLine(t *testing.T) {
+	// Found in the real Great Balls of Fire doc: a parenthesized run of
+	// multiple chords with internal spaces. Naive whitespace tokenizing
+	// splits "(/F" and "F#  G)" into separate words, neither of which is
+	// itself chord-shaped, so the whole line used to fall back to an
+	// opaque TextLine. The parens should be treated as one token.
+	input := "(/F /F /F#  G)                   (/G /G /F#  F7)\n"
+	blocks := Parse(input)
+	if blocks[0].Kind != ChordOnlyLine {
+		t.Fatalf("Kind = %v, want ChordOnlyLine", blocks[0].Kind)
+	}
+	var chords []string
+	for _, tok := range blocks[0].Tokens {
+		if tok.Chord != "" {
+			chords = append(chords, tok.Chord)
+		}
+	}
+	want := []string{"(/F /F /F#  G)", "(/G /G /F#  F7)"}
+	if len(chords) != len(want) || chords[0] != want[0] || chords[1] != want[1] {
+		t.Errorf("chords = %v, want %v", chords, want)
+	}
+}
+
+func TestParseMultiParenRepeatReferenceStaysTextLine(t *testing.T) {
+	// This should NOT be swept up by the multi-word-paren-chord-group fix
+	// above — "(CHORUS 1)" isn't a chord, and misclassifying it would be
+	// semantically wrong for a future editor that treats chord tokens as
+	// movable atoms.
+	input := "(CHORUS 1)   (CHORUS 2)\n"
+	blocks := Parse(input)
+	if blocks[0].Kind != TextLine {
+		t.Errorf("Kind = %v, want TextLine (repeat-reference, not a chord group)", blocks[0].Kind)
+	}
+}
+
 func TestParseChordLyricPairInterleavesTokens(t *testing.T) {
 	// No trailing \n — isolates the pairing/tokenizing behavior from
 	// end-of-file newline handling (covered by the full-file round-trip test).

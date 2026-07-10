@@ -7,10 +7,19 @@ import (
 )
 
 // sectionHeaderRe matches standalone label lines like "CHORUS:", "VERSE 1:",
-// "PRE-CHORUS:", "END:". The colon must be the last character — a line like
-// "INTRO:  b b b ..." has content after the label and intentionally does not
-// match (see TestParseIntroLineWithLabelFallsBackToTextLine).
-var sectionHeaderRe = regexp.MustCompile(`^[A-Z][A-Z0-9 '()/-]*:$`)
+// "PRE-CHORUS:", "END:", and "VERSE 1a:" (Jeff labels alternate-lyric verses
+// with a lowercase letter suffix). The colon must be the last character — a
+// line like "INTRO:  b b b ..." has content after the label and
+// intentionally does not match (see TestParseIntroLineWithLabelFallsBackToTextLine).
+var sectionHeaderRe = regexp.MustCompile(`^[A-Z][A-Za-z0-9 '()/-]*:$`)
+
+// parenChordGroupContentRe validates what's allowed inside a parenthesized
+// chord group like "(/F /F /F#  G)" — note letters, accidentals, slashes,
+// digits, and spaces. Deliberately excludes anything that isn't plausibly a
+// chord, e.g. "(CHORUS 1)" — a repeat-reference, not a chord — so that
+// stays split into ordinary words and falls back to TextLine as before (see
+// TestParseMultiParenRepeatReferenceStaysTextLine).
+var parenChordGroupContentRe = regexp.MustCompile(`^[A-Ga-g0-9#/ x-]*$`)
 
 // chordTokenRe matches anything that can sit in a "chord row": real chord
 // symbols (root + accidental + quality + extension + slash bass), bare
@@ -39,12 +48,38 @@ func tokenizeWords(line []rune) []word {
 			break
 		}
 		start := i
+		if line[i] == '(' {
+			if end, ok := matchingParenChordGroup(line, i); ok {
+				words = append(words, word{text: string(line[start:end]), startCol: start})
+				i = end
+				continue
+			}
+		}
 		for i < len(line) && line[i] != ' ' {
 			i++
 		}
 		words = append(words, word{text: string(line[start:i]), startCol: start})
 	}
 	return words
+}
+
+// matchingParenChordGroup looks for a closing ')' starting from an opening
+// '(' at position open, reporting the position just past it (so the whole
+// "(...)" span can be captured as one word, spaces and all) only if the
+// content between the parens is chord-shaped per parenChordGroupContentRe.
+// A multi-word chord group like "(/F /F /F#  G)" needs this — plain
+// whitespace tokenizing would otherwise split it into fragments that don't
+// individually look like chords (see TestParseMultiWordParenChordGroupIsChordLine).
+func matchingParenChordGroup(line []rune, open int) (end int, ok bool) {
+	for j := open + 1; j < len(line); j++ {
+		if line[j] == ')' {
+			if !parenChordGroupContentRe.MatchString(string(line[open+1 : j])) {
+				return 0, false
+			}
+			return j + 1, true
+		}
+	}
+	return 0, false
 }
 
 func isChordLineCandidate(line string) bool {
