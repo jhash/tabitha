@@ -11,7 +11,7 @@ import (
 // with a lowercase letter suffix). The colon must be the last character — a
 // line like "INTRO:  b b b ..." has content after the label and
 // intentionally does not match (see TestParseIntroLineWithLabelFallsBackToTextLine).
-var sectionHeaderRe = regexp.MustCompile(`^[A-Z][A-Za-z0-9 '()/-]*:$`)
+var sectionHeaderRe = regexp.MustCompile(`^[A-Z][A-Za-z0-9 '()/½¼¾-]*:$`)
 
 // parenChordGroupContentRe validates what's allowed inside a parenthesized
 // chord group like "(/F /F /F#  G)" — note letters, accidentals, slashes,
@@ -19,7 +19,7 @@ var sectionHeaderRe = regexp.MustCompile(`^[A-Z][A-Za-z0-9 '()/-]*:$`)
 // chord, e.g. "(CHORUS 1)" — a repeat-reference, not a chord — so that
 // stays split into ordinary words and falls back to TextLine as before (see
 // TestParseMultiParenRepeatReferenceStaysTextLine).
-var parenChordGroupContentRe = regexp.MustCompile(`^[A-Ga-g0-9#/ x-]*$`)
+var parenChordGroupContentRe = regexp.MustCompile(`^[A-Ga-g0-9#/ x∆Δ-]*$`)
 
 // chordTokenRe matches anything that can sit in a "chord row": real chord
 // symbols (root + accidental + quality + extension + slash bass), bare
@@ -27,7 +27,12 @@ var parenChordGroupContentRe = regexp.MustCompile(`^[A-Ga-g0-9#/ x-]*$`)
 // delimiters ("|"), and arbitrary parenthesized annotations ("(drums)",
 // "(E6)"). It's deliberately loose — a heuristic for "what Jeff put in the
 // chord row", not a music-theory validator.
-var chordTokenRe = regexp.MustCompile(`(?i)^(\([^)]*\)|x[0-9]+|\||[a-g](#|b)?(maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9)?[0-9]{0,2}(/[a-g](#|b)?)?)$`)
+// The quality group includes bare "m" (found across 1410 real
+// transcription versions — "Bm", "Em", "Am"... the standard shorthand for
+// minor, distinct from the full word "min") and ∆/Δ (U+2206 INCREMENT and
+// U+0394 GREEK CAPITAL LETTER DELTA — Jeff uses both interchangeably) as
+// shorthand for "major7", alongside the usual text qualities.
+var chordTokenRe = regexp.MustCompile(`(?i)^(\([^)]*\)|x[0-9]+|\||[a-g](#|b)?(maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9|m|∆|Δ)?[0-9]{0,2}(/[a-g](#|b)?)?)$`)
 
 // word is a whitespace-delimited token from a line, with its rune (not
 // byte) start column — required for correct alignment when the source

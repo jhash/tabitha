@@ -51,6 +51,65 @@ func TestParseSectionHeaderWithLowercaseSuffix(t *testing.T) {
 	}
 }
 
+func TestParseSectionHeaderWithFractionGlyph(t *testing.T) {
+	// Real catalog find: Jeff labels a half-chorus "CHORUS ½:" using the
+	// Unicode fraction glyph (U+00BD), not "1/2".
+	blocks := Parse("CHORUS ½:\n")
+	if blocks[0].Kind != SectionHeader {
+		t.Errorf("Parse(%q)[0].Kind = %v, want SectionHeader", "CHORUS ½:", blocks[0].Kind)
+	}
+}
+
+func TestParseChordLineRecognizesBareMMinorShorthand(t *testing.T) {
+	// Real catalog find (found across 1410 transcription versions):
+	// chordTokenRe required the full word "min" for a minor chord, so the
+	// extremely common bare-"m" shorthand ("Bm", "Em", "Am"...) never
+	// matched — meaning almost any real chord line using it misclassified
+	// as plain text and lost chord detection entirely.
+	blocks := Parse("Bm        Em                  A          F#m\nI, I just died in your arms tonight\n")
+	if blocks[0].Kind != ChordLyricPair {
+		t.Fatalf("Parse()[0].Kind = %v, want ChordLyricPair — bare-m minor chords should be recognized", blocks[0].Kind)
+	}
+	var chords []string
+	for _, tok := range blocks[0].Tokens {
+		if tok.Chord != "" {
+			chords = append(chords, tok.Chord)
+		}
+	}
+	want := []string{"Bm", "Em", "A", "F#m"}
+	if len(chords) != len(want) {
+		t.Fatalf("chords = %v, want %v", chords, want)
+	}
+	for i := range want {
+		if chords[i] != want[i] {
+			t.Errorf("chords[%d] = %q, want %q", i, chords[i], want[i])
+		}
+	}
+}
+
+func TestParseChordLineRecognizesDeltaMajor7Notation(t *testing.T) {
+	// Real catalog find (found across 584 transcription versions): Jeff
+	// writes major7 chords as e.g. "G∆" (U+2206 INCREMENT, used
+	// interchangeably with the Greek capital delta for "major7") instead
+	// of "Gmaj7". Previously chordTokenRe didn't recognize "∆" as part of
+	// a chord quality, so any chord line containing one word shaped like
+	// this failed isChordLineCandidate entirely — losing chord detection
+	// (and therefore bolding) for the WHOLE line, not just that token.
+	blocks := Parse("Bm        G∆\nI keep looking for something I can't get\n")
+	if blocks[0].Kind != ChordLyricPair {
+		t.Fatalf("Parse()[0].Kind = %v, want ChordLyricPair — a line with a delta-major7 chord should still be recognized as a chord line", blocks[0].Kind)
+	}
+	var chords []string
+	for _, tok := range blocks[0].Tokens {
+		if tok.Chord != "" {
+			chords = append(chords, tok.Chord)
+		}
+	}
+	if len(chords) != 2 || chords[0] != "Bm" || chords[1] != "G∆" {
+		t.Errorf("chords = %v, want [Bm G∆]", chords)
+	}
+}
+
 func TestParseMultiWordParenChordGroupIsChordLine(t *testing.T) {
 	// Found in the real Great Balls of Fire doc: a parenthesized run of
 	// multiple chords with internal spaces. Naive whitespace tokenizing
