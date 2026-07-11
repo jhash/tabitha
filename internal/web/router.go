@@ -18,13 +18,15 @@ import (
 // superadmin-gated /admin section. jobClient may be nil wherever nothing
 // under /admin/tools is exercised (most routes never touch it).
 func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]) http.Handler {
+	SetAssetVersions(LoadAssetVersions("static"))
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(auth.OptionalUser(q))
 
 	fileServer := http.FileServer(http.Dir("static"))
-	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+	r.Handle("/static/*", staticCacheHeaders(http.StripPrefix("/static/", fileServer)))
 
 	r.Get("/healthz", HealthzHandler(q))
 	r.Get("/", HomeHandler(q))

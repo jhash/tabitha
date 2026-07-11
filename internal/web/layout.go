@@ -49,13 +49,13 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 			// components.HTML5 itself — don't duplicate them here.
 			Link(
 				Rel("preload"),
-				Href("/static/fonts/Lora-Variable.woff2"),
+				Href(versionedHref("/static/fonts/Lora-Variable.woff2", assets.LoraVariable)),
 				As("font"),
 				Type("font/woff2"),
 				CrossOrigin("anonymous"),
 			),
-			Link(Rel("stylesheet"), Href("/static/css/reset.css")),
-			Link(Rel("stylesheet"), Href("/static/css/style.css")),
+			Link(Rel("stylesheet"), Href(versionedHref("/static/css/reset.css", assets.Reset))),
+			Link(Rel("stylesheet"), Href(versionedHref("/static/css/style.css", assets.Style))),
 		},
 		Body: g.Group{
 			Header(Class("site-header"),
@@ -65,7 +65,7 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 				),
 			),
 			layoutRow(sidebar, wide, mainClass, body...),
-			Script(Src("/static/js/htmx.min.js")),
+			Script(Src(versionedHref("/static/js/htmx.min.js", assets.Htmx))),
 		},
 	})
 }
