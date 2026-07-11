@@ -27,7 +27,7 @@ func AdminToolsHandler(jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
 		var jobsList []jobs.JobSummary
 		if jobClient != nil {
 			var err error
-			jobsList, err = jobs.RecentJobs(r.Context(), jobClient, 30)
+			jobsList, err = jobs.RecentJobs(r.Context(), jobClient, 10)
 			if err != nil {
 				http.Error(w, "failed to load recent jobs", http.StatusInternalServerError)
 				return
@@ -56,6 +56,7 @@ func adminToolsContent(recentJobs []jobs.JobSummary) g.Node {
 		),
 		H2(g.Text("Recent jobs")),
 		recentJobsTable(recentJobs),
+		P(A(Href("/admin/jobs"), g.Text("View all jobs →"))),
 	)
 }
 
