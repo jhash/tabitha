@@ -24,6 +24,28 @@ type SongRow struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	HasVersion   bool
+	// DocCreatedAt/DocModifiedAt are the Google Doc's own createdTime/
+	// modifiedTime (set during digestion via the Drive API), nil for
+	// songs never digested — see effectiveAddedAt/effectiveUpdatedAt.
+	DocCreatedAt  *time.Time
+	DocModifiedAt *time.Time
+}
+
+// effectiveAddedAt/effectiveUpdatedAt prefer the Google Doc's own
+// timestamps (when a song has been digested) over tabitha's own
+// created_at/updated_at, which only reflect when tabitha touched the row.
+func effectiveAddedAt(s SongRow) time.Time {
+	if s.DocCreatedAt != nil {
+		return *s.DocCreatedAt
+	}
+	return s.CreatedAt
+}
+
+func effectiveUpdatedAt(s SongRow) time.Time {
+	if s.DocModifiedAt != nil {
+		return *s.DocModifiedAt
+	}
+	return s.UpdatedAt
 }
 
 var sortColumns = []string{"title", "artist", "updated", "added", "status", "added_by"}
@@ -190,8 +212,8 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 					Td(A(Href(fmt.Sprintf("/songs/%d", s.ID)), g.Text(s.Title))),
 					Td(g.Text(s.Artist)),
 					Td(g.Text(s.Status)),
-					Td(g.Text(formatDate(s.UpdatedAt))),
-					Td(g.Text(formatDate(s.CreatedAt))),
+					Td(g.Text(formatDate(effectiveUpdatedAt(s)))),
+					Td(g.Text(formatDate(effectiveAddedAt(s)))),
 					Td(g.Text(addedByLabel(s))),
 				)
 			}),

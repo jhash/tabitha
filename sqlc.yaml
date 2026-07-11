@@ -8,6 +8,7 @@ sql:
       - migrations/0005_google_oauth_tokens.up.sql
       - migrations/0006_artists_genres.up.sql
       - migrations/0007_status_default_preferred_key.up.sql
+      - migrations/0008_doc_timestamps.up.sql
     queries: internal/db/queries
     engine: postgresql
     gen:

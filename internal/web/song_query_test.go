@@ -4,6 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/jhash/tabitha/internal/db"
 )
@@ -216,5 +219,52 @@ func TestListSongsQuerySortToggleReversesOrder(t *testing.T) {
 	}
 	if desc[0].Title != "Yesterday" || desc[1].Title != "Africa" {
 		t.Errorf("desc order = %v, want [Yesterday, Africa]", []string{desc[0].Title, desc[1].Title})
+	}
+}
+
+func TestListSongsQueryReportsDocTimestampsWhenSet(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	withDocTimes, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "With Doc Times"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	docCreated := time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	docModified := time.Date(2021, 3, 4, 0, 0, 0, 0, time.UTC)
+	if err := q.SetSongDocTimestamps(ctx, db.SetSongDocTimestampsParams{
+		ID:            withDocTimes.ID,
+		DocCreatedAt:  pgtype.Timestamptz{Time: docCreated, Valid: true},
+		DocModifiedAt: pgtype.Timestamptz{Time: docModified, Valid: true},
+	}); err != nil {
+		t.Fatalf("SetSongDocTimestamps() error = %v", err)
+	}
+
+	without, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Without Doc Times"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "title"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	var withRow, withoutRow SongRow
+	for _, r := range rows {
+		if r.ID == withDocTimes.ID {
+			withRow = r
+		}
+		if r.ID == without.ID {
+			withoutRow = r
+		}
+	}
+	if withRow.DocCreatedAt == nil || !withRow.DocCreatedAt.Equal(docCreated) {
+		t.Errorf("withRow.DocCreatedAt = %v, want %v", withRow.DocCreatedAt, docCreated)
+	}
+	if withRow.DocModifiedAt == nil || !withRow.DocModifiedAt.Equal(docModified) {
+		t.Errorf("withRow.DocModifiedAt = %v, want %v", withRow.DocModifiedAt, docModified)
+	}
+	if withoutRow.DocCreatedAt != nil || withoutRow.DocModifiedAt != nil {
+		t.Errorf("withoutRow doc timestamps = %v/%v, want both nil", withoutRow.DocCreatedAt, withoutRow.DocModifiedAt)
 	}
 }

@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/time/rate"
 	"google.golang.org/api/docs/v1"
+	"google.golang.org/api/drive/v3"
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 
@@ -134,6 +137,20 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 			return fmt.Errorf("digest_song: setting preferred key: %w", err)
 		}
 	}
+
+	// The doc's own createdTime/modifiedTime are more meaningful to Jeff
+	// than when tabitha happened to scrape it — see docs/jeff-domain-notes.md.
+	docCreatedAt, docModifiedAt, err := w.fetchDocTimestamps(ctx, token, docID)
+	if err != nil {
+		return snoozeOnRateLimit(fmt.Errorf("digest_song: fetching doc timestamps: %w", err))
+	}
+	if err := w.Queries.SetSongDocTimestamps(ctx, db.SetSongDocTimestampsParams{
+		ID:            song.ID,
+		DocCreatedAt:  pgtype.Timestamptz{Time: docCreatedAt, Valid: true},
+		DocModifiedAt: pgtype.Timestamptz{Time: docModifiedAt, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("digest_song: storing doc timestamps: %w", err)
+	}
 	return nil
 }
 
@@ -169,4 +186,27 @@ func (w *DigestSongWorker) fetchDocText(ctx context.Context, token *oauth2.Token
 		return "", fmt.Errorf("fetching doc %s: %w", docID, err)
 	}
 	return originalKeySection(docSectionsFromGoogleDoc(doc)), nil
+}
+
+func (w *DigestSongWorker) fetchDocTimestamps(ctx context.Context, token *oauth2.Token, docID string) (created, modified time.Time, err error) {
+	if err := w.wait(ctx); err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("waiting for rate limiter: %w", err)
+	}
+	svc, err := drive.NewService(ctx, option.WithTokenSource(oauth2.StaticTokenSource(token)))
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("building drive client: %w", err)
+	}
+	file, err := svc.Files.Get(docID).Fields("createdTime", "modifiedTime").Do()
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("fetching drive file metadata for %s: %w", docID, err)
+	}
+	created, err = parseDriveTime(file.CreatedTime)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("parsing createdTime: %w", err)
+	}
+	modified, err = parseDriveTime(file.ModifiedTime)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("parsing modifiedTime: %w", err)
+	}
+	return created, modified, nil
 }

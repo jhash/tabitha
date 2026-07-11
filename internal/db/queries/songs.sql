@@ -61,3 +61,8 @@ ORDER BY u.name;
 
 -- name: SetSongPreferredKey :exec
 UPDATE songs SET preferred_key = $2, updated_at = now() WHERE id = $1;
+
+-- name: SetSongDocTimestamps :exec
+-- Deliberately does not touch updated_at — these mirror the Google Doc's
+-- own createdTime/modifiedTime, not a tabitha-side content change.
+UPDATE songs SET doc_created_at = $2, doc_modified_at = $3 WHERE id = $1;
