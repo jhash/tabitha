@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -55,6 +54,6 @@ func songEditContent(song db.Song, blocks []transcription.Block, hasVersion bool
 		g.If(hasVersion,
 			Pre(Class("transcription"), g.Text(transcription.Render(blocks))),
 		),
-		P(A(Href(fmt.Sprintf("/songs/%d", song.ID)), g.Text("Back to song"))),
+		P(A(Href(songShowHref(song)), g.Text("Back to song"))),
 	)
 }

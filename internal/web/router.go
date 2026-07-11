@@ -30,7 +30,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 
 	r.Get("/healthz", HealthzHandler(q))
 	r.Get("/", HomeHandler(q))
-	r.Get("/songs/{id}", SongShowHandler(q))
+	r.Get("/songs/{idOrSlug}", SongShowHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/edit", SongEditHandler(q))
 
 	if auth.GoogleConfigured(cfg) {

@@ -80,6 +80,71 @@ func TestTocSyncWorkerUpsertsRowsFromHTTPResponse(t *testing.T) {
 	}
 }
 
+func TestTocSyncWorkerAssignsSlugsToNewSongs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte(tocFixtureCSV))
+	}))
+	defer server.Close()
+
+	q := setupTestQueries(t)
+	worker := &TocSyncWorker{Queries: q, HTTPClient: server.Client(), SheetURL: server.URL}
+
+	job := &river.Job[TocSyncArgs]{JobRow: &rivertype.JobRow{}, Args: TocSyncArgs{}}
+	if err := worker.Work(context.Background(), job); err != nil {
+		t.Fatalf("Work() error = %v", err)
+	}
+
+	song, err := q.GetSongByTitle(context.Background(), "(I Can't Get No) Satisfaction")
+	if err != nil {
+		t.Fatalf("GetSongByTitle() error = %v", err)
+	}
+	if song.Slug != "i-cant-get-no-satisfaction" {
+		t.Errorf("Slug = %q, want %q", song.Slug, "i-cant-get-no-satisfaction")
+	}
+}
+
+func TestTocSyncWorkerAppendsArtistSlugOnTitleCollision(t *testing.T) {
+	const csv = `TITLE,ARTIST,GENRE,FILM/SHOW/ALBUM,DECADE,BOB,STATUS,SCRAPE LINK,Notes,TRANSPOSE
+Yesterday,The Beatles,,,1960s,,Done,,,
+Yesterday,Boyz II Men,,,1990s,,Done,,,
+`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte(csv))
+	}))
+	defer server.Close()
+
+	q := setupTestQueries(t)
+	worker := &TocSyncWorker{Queries: q, HTTPClient: server.Client(), SheetURL: server.URL}
+
+	job := &river.Job[TocSyncArgs]{JobRow: &rivertype.JobRow{}, Args: TocSyncArgs{}}
+	if err := worker.Work(context.Background(), job); err != nil {
+		t.Fatalf("Work() error = %v", err)
+	}
+
+	beatles, err := q.GetSongByTitle(context.Background(), "Yesterday")
+	if err != nil {
+		t.Fatalf("GetSongByTitle() error = %v", err)
+	}
+	_ = beatles
+
+	all, err := q.ListAllSongSlugs(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllSongSlugs() error = %v", err)
+	}
+	slugs := make(map[string]bool)
+	for _, s := range all {
+		slugs[s.Slug] = true
+	}
+	if !slugs["yesterday"] {
+		t.Errorf("expected one song to keep the plain %q slug, got %v", "yesterday", slugs)
+	}
+	if !slugs["yesterday-boyz-ii-men"] && !slugs["yesterday-the-beatles"] {
+		t.Errorf("expected the colliding song to get an artist-suffixed slug, got %v", slugs)
+	}
+}
+
 func TestTocSyncWorkerLinksArtistAndGenre(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")

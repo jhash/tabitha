@@ -92,7 +92,7 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 				u.name AS added_by_name, u.email AS added_by_email,
 				s.created_at, s.updated_at,
 				s.doc_created_at, s.doc_modified_at,
-				s.source_site,
+				s.slug,
 				(s.current_version_id IS NOT NULL) AS has_version,
 				coalesce(string_agg(DISTINCT g.name, ', '), '') AS genres
 			FROM songs s
@@ -124,13 +124,11 @@ func ListSongsQuery(ctx context.Context, dbtx db.DBTX, p SongQueryParams) ([]Son
 		var s SongRow
 		var addedByName, addedByEmail, genres *string
 		var docCreatedAt, docModifiedAt pgtype.Timestamptz
-		var sourceSite *string
-		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &docCreatedAt, &docModifiedAt, &sourceSite, &s.HasVersion, &genres); err != nil {
+		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &docCreatedAt, &docModifiedAt, &s.Slug, &s.HasVersion, &genres); err != nil {
 			return nil, fmt.Errorf("scanning song row: %w", err)
 		}
 		s.AddedByName = deref(addedByName)
 		s.AddedByEmail = deref(addedByEmail)
-		s.SourceSite = deref(sourceSite)
 		if docCreatedAt.Valid {
 			s.DocCreatedAt = &docCreatedAt.Time
 		}

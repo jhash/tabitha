@@ -496,6 +496,72 @@ func TestSongEditRouteServesPageForSuperadmin(t *testing.T) {
 	}
 }
 
+func TestSongShowRouteRedirectsIDToSlugWhenSlugSet(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d", song.ID), nil))
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /songs/%d status = %d, want %d", song.ID, rec.Code, http.StatusMovedPermanently)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/songs/africa" {
+		t.Errorf("Location = %q, want %q", loc, "/songs/africa")
+	}
+}
+
+func TestSongShowRouteServesBySlugDirectly(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/songs/africa", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/africa status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Africa") {
+		t.Errorf("expected the song page to render, got: %s", rec.Body.String())
+	}
+}
+
+func TestSongShowRouteServesByIDWhenNoSlugSetYet(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d", song.ID), nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/%d status = %d, want 200 (no slug assigned yet)", song.ID, rec.Code)
+	}
+}
+
 func TestSongShowRouteShowsEditLinkOnlyToSuperadmin(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)

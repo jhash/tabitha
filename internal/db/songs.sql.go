@@ -12,7 +12,7 @@ import (
 )
 
 const getSongByID = `-- name: GetSongByID :one
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site FROM songs WHERE id = $1
+SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug FROM songs WHERE id = $1
 `
 
 func (q *Queries) GetSongByID(ctx context.Context, id int64) (Song, error) {
@@ -40,12 +40,47 @@ func (q *Queries) GetSongByID(ctx context.Context, id int64) (Song, error) {
 		&i.DocCreatedAt,
 		&i.DocModifiedAt,
 		&i.SourceSite,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const getSongBySlug = `-- name: GetSongBySlug :one
+SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug FROM songs WHERE slug = $1
+`
+
+func (q *Queries) GetSongBySlug(ctx context.Context, slug string) (Song, error) {
+	row := q.db.QueryRow(ctx, getSongBySlug, slug)
+	var i Song
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Artist,
+		&i.Genre,
+		&i.FilmShowAlbum,
+		&i.Decade,
+		&i.BobTag,
+		&i.Status,
+		&i.SourceUrl,
+		&i.Notes,
+		&i.TransposeHint,
+		&i.GoogleDocID,
+		&i.CurrentVersionID,
+		&i.AddedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArtistID,
+		&i.PreferredKey,
+		&i.DocCreatedAt,
+		&i.DocModifiedAt,
+		&i.SourceSite,
+		&i.Slug,
 	)
 	return i, err
 }
 
 const getSongByTitle = `-- name: GetSongByTitle :one
-SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site FROM songs WHERE lower(title) = lower($1)
+SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug FROM songs WHERE lower(title) = lower($1)
 `
 
 func (q *Queries) GetSongByTitle(ctx context.Context, lower string) (Song, error) {
@@ -73,12 +108,13 @@ func (q *Queries) GetSongByTitle(ctx context.Context, lower string) (Song, error
 		&i.DocCreatedAt,
 		&i.DocModifiedAt,
 		&i.SourceSite,
+		&i.Slug,
 	)
 	return i, err
 }
 
 const getSongCurrentVersion = `-- name: GetSongCurrentVersion :one
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
 FROM songs
 JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
 WHERE songs.id = $1
@@ -114,6 +150,7 @@ func (q *Queries) GetSongCurrentVersion(ctx context.Context, id int64) (GetSongC
 		&i.Song.DocCreatedAt,
 		&i.Song.DocModifiedAt,
 		&i.Song.SourceSite,
+		&i.Song.Slug,
 		&i.TranscriptionVersion.ID,
 		&i.TranscriptionVersion.SongID,
 		&i.TranscriptionVersion.Kind,
@@ -127,6 +164,38 @@ func (q *Queries) GetSongCurrentVersion(ctx context.Context, id int64) (GetSongC
 		&i.TranscriptionVersion.CreatedAt,
 	)
 	return i, err
+}
+
+const listAllSongSlugs = `-- name: ListAllSongSlugs :many
+SELECT id, slug FROM songs WHERE slug <> ''
+`
+
+type ListAllSongSlugsRow struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+}
+
+// Loaded once per slug-assignment pass (backfill or per-song on ingest)
+// to answer "is this slug taken" locally rather than one query per
+// candidate — the whole catalog's slugs easily fit in memory.
+func (q *Queries) ListAllSongSlugs(ctx context.Context) ([]ListAllSongSlugsRow, error) {
+	rows, err := q.db.Query(ctx, listAllSongSlugs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllSongSlugsRow
+	for rows.Next() {
+		var i ListAllSongSlugsRow
+		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listDistinctAddedByUsers = `-- name: ListDistinctAddedByUsers :many
@@ -211,7 +280,7 @@ func (q *Queries) ListSongIDsWithoutCurrentVersion(ctx context.Context, limit in
 
 const listSongsByTitle = `-- name: ListSongsByTitle :many
 
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, users.name AS added_by_name, users.email AS added_by_email
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, users.name AS added_by_name, users.email AS added_by_email
 FROM songs
 LEFT JOIN users ON users.id = songs.added_by_user_id
 ORDER BY lower(songs.title) ASC, lower(songs.artist) ASC
@@ -238,7 +307,8 @@ type ListSongsByTitleRow struct {
 	PreferredKey     string             `json:"preferred_key"`
 	DocCreatedAt     pgtype.Timestamptz `json:"doc_created_at"`
 	DocModifiedAt    pgtype.Timestamptz `json:"doc_modified_at"`
-	SourceSite       *string            `json:"source_site"`
+	SourceSite       string             `json:"source_site"`
+	Slug             string             `json:"slug"`
 	AddedByName      *string            `json:"added_by_name"`
 	AddedByEmail     *string            `json:"added_by_email"`
 }
@@ -279,6 +349,7 @@ func (q *Queries) ListSongsByTitle(ctx context.Context) ([]ListSongsByTitleRow, 
 			&i.DocCreatedAt,
 			&i.DocModifiedAt,
 			&i.SourceSite,
+			&i.Slug,
 			&i.AddedByName,
 			&i.AddedByEmail,
 		); err != nil {
@@ -351,6 +422,20 @@ func (q *Queries) SetSongPreferredKey(ctx context.Context, arg SetSongPreferredK
 	return err
 }
 
+const setSongSlug = `-- name: SetSongSlug :exec
+UPDATE songs SET slug = $2 WHERE id = $1
+`
+
+type SetSongSlugParams struct {
+	ID   int64  `json:"id"`
+	Slug string `json:"slug"`
+}
+
+func (q *Queries) SetSongSlug(ctx context.Context, arg SetSongSlugParams) error {
+	_, err := q.db.Exec(ctx, setSongSlug, arg.ID, arg.Slug)
+	return err
+}
+
 const upsertSongFromTOC = `-- name: UpsertSongFromTOC :one
 INSERT INTO songs (
     title, artist, genre, film_show_album, decade, bob_tag, status,
@@ -368,7 +453,7 @@ ON CONFLICT (lower(title), lower(artist)) DO UPDATE SET
     notes = EXCLUDED.notes,
     transpose_hint = EXCLUDED.transpose_hint,
     updated_at = now()
-RETURNING id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site
+RETURNING id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug
 `
 
 type UpsertSongFromTOCParams struct {
@@ -420,6 +505,7 @@ func (q *Queries) UpsertSongFromTOC(ctx context.Context, arg UpsertSongFromTOCPa
 		&i.DocCreatedAt,
 		&i.DocModifiedAt,
 		&i.SourceSite,
+		&i.Slug,
 	)
 	return i, err
 }

@@ -17,21 +17,44 @@ import (
 	"github.com/jhash/tabitha/internal/transcription"
 )
 
+// songShowHref is a song's canonical show-page URL: its slug once one's
+// been assigned (during toc_sync), falling back to its numeric ID for the
+// brief window before that happens.
+func songShowHref(song db.Song) string {
+	if song.Slug != "" {
+		return "/songs/" + song.Slug
+	}
+	return fmt.Sprintf("/songs/%d", song.ID)
+}
+
 // SongShowHandler renders a single song's page: its transcription if one has
 // been digested yet, otherwise a plain not-yet-digested placeholder (the
 // state every song is in until Task 23's real digestion pipeline runs).
 func SongShowHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
+		idOrSlug := chi.URLParam(r, "idOrSlug")
 
-		song, err := q.GetSongByID(r.Context(), id)
-		if err != nil {
-			http.NotFound(w, r)
-			return
+		var song db.Song
+		var err error
+		if id, parseErr := strconv.ParseInt(idOrSlug, 10, 64); parseErr == nil {
+			song, err = q.GetSongByID(r.Context(), id)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			// Numeric IDs are a legacy/fallback path — once a song has a
+			// slug, that's the canonical URL and old links should
+			// redirect there rather than serve two URLs for one song.
+			if song.Slug != "" {
+				http.Redirect(w, r, "/songs/"+song.Slug, http.StatusMovedPermanently)
+				return
+			}
+		} else {
+			song, err = q.GetSongBySlug(r.Context(), idOrSlug)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
 		}
 
 		blocks, key, hasVersion, err := currentVersionBlocks(r.Context(), q, song)

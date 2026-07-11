@@ -49,6 +49,17 @@ func TestHomeTableListsEachSongWithLinkToShowPage(t *testing.T) {
 	}
 }
 
+func TestHomeTableLinksBySlugWhenSet(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Artist: "Toto", Slug: "africa"}}
+	html := renderHomeTable(t, songs, SongQueryParams{Sort: "title"})
+	if !strings.Contains(html, `href="/songs/africa"`) {
+		t.Errorf("expected a link to /songs/africa, got: %s", html)
+	}
+	if strings.Contains(html, `href="/songs/2"`) {
+		t.Errorf("expected no ID-based link once a slug is set, got: %s", html)
+	}
+}
+
 func TestHomeTableHasSortableColumnHeaders(t *testing.T) {
 	html := renderHomeTable(t, sampleSongRows(), SongQueryParams{Sort: "title"})
 	for _, col := range []string{"title", "artist", "updated", "added", "status", "added_by"} {

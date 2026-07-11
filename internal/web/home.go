@@ -29,11 +29,7 @@ type SongRow struct {
 	// songs never digested — see effectiveAddedAt/effectiveUpdatedAt.
 	DocCreatedAt  *time.Time
 	DocModifiedAt *time.Time
-	// SourceSite is derived (by the DB, from source_url's host) — which
-	// tab/chord site a song's transcription originated from, e.g.
-	// "ultimate-guitar", or "tabitha-spreadsheet" when there's no
-	// external link at all.
-	SourceSite string
+	Slug          string
 }
 
 // effectiveAddedAt/effectiveUpdatedAt prefer the Google Doc's own
@@ -218,24 +214,32 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 				sortHeader("Last Updated", "updated", params),
 				sortHeader("Added", "added", params),
 				sortHeader("Added By", "added_by", params),
-				Th(g.Text("Source")),
 			),
 		),
 		TBody(
 			g.Map(songs, func(s SongRow) g.Node {
 				return Tr(
 					g.If(!s.HasVersion, Class("no-version")),
-					Td(A(Href(fmt.Sprintf("/songs/%d", s.ID)), g.Text(s.Title))),
+					Td(A(Href(songHref(s)), g.Text(s.Title))),
 					Td(g.Text(s.Artist)),
 					Td(g.Text(s.Status)),
 					Td(g.Text(formatDate(effectiveUpdatedAt(s)))),
 					Td(g.Text(formatDate(effectiveAddedAt(s)))),
 					Td(g.Text(addedByLabel(s))),
-					Td(g.Text(s.SourceSite)),
 				)
 			}),
 		),
 	)
+}
+
+// songHref prefers a song's slug (the canonical URL) over its numeric ID,
+// falling back to the ID only for the brief window before a song has been
+// slugged (assigned during toc_sync).
+func songHref(s SongRow) string {
+	if s.Slug != "" {
+		return "/songs/" + s.Slug
+	}
+	return fmt.Sprintf("/songs/%d", s.ID)
 }
 
 func addedByLabel(s SongRow) string {

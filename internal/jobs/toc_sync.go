@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/jhash/tabitha/internal/db"
+	"github.com/jhash/tabitha/internal/slug"
 )
 
 // tocSpreadsheetID is Jeffrey's table-of-contents Google Sheet.
@@ -69,6 +70,15 @@ func (w *TocSyncWorker) Work(ctx context.Context, job *river.Job[TocSyncArgs]) e
 		return fmt.Errorf("toc_sync: parsing sheet: %w", err)
 	}
 
+	existingSlugs, err := w.Queries.ListAllSongSlugs(ctx)
+	if err != nil {
+		return fmt.Errorf("toc_sync: listing existing slugs: %w", err)
+	}
+	takenSlugs := make(map[string]bool, len(existingSlugs))
+	for _, s := range existingSlugs {
+		takenSlugs[s.Slug] = true
+	}
+
 	for _, row := range rows {
 		song, err := w.Queries.UpsertSongFromTOC(ctx, row)
 		if err != nil {
@@ -76,6 +86,18 @@ func (w *TocSyncWorker) Work(ctx context.Context, job *river.Job[TocSyncArgs]) e
 		}
 		if err := w.linkArtistAndGenre(ctx, song, row); err != nil {
 			return fmt.Errorf("toc_sync: linking artist/genre for %q: %w", row.Title, err)
+		}
+		// Slugs are assigned once and never recomputed — re-slugifying on
+		// every sync (e.g. after a title tweak) would break any links
+		// already shared to the old URL.
+		if song.Slug == "" {
+			newSlug := slug.ResolveUnique(slug.Slugify(song.Title), slug.Slugify(song.Artist), func(s string) bool {
+				return takenSlugs[s]
+			})
+			if err := w.Queries.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: newSlug}); err != nil {
+				return fmt.Errorf("toc_sync: assigning slug for %q: %w", row.Title, err)
+			}
+			takenSlugs[newSlug] = true
 		}
 	}
 

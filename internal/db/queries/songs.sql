@@ -66,3 +66,15 @@ UPDATE songs SET preferred_key = $2, updated_at = now() WHERE id = $1;
 -- Deliberately does not touch updated_at — these mirror the Google Doc's
 -- own createdTime/modifiedTime, not a tabitha-side content change.
 UPDATE songs SET doc_created_at = $2, doc_modified_at = $3 WHERE id = $1;
+
+-- name: GetSongBySlug :one
+SELECT * FROM songs WHERE slug = $1;
+
+-- name: ListAllSongSlugs :many
+-- Loaded once per slug-assignment pass (backfill or per-song on ingest)
+-- to answer "is this slug taken" locally rather than one query per
+-- candidate — the whole catalog's slugs easily fit in memory.
+SELECT id, slug FROM songs WHERE slug <> '';
+
+-- name: SetSongSlug :exec
+UPDATE songs SET slug = $2 WHERE id = $1;
