@@ -10,6 +10,9 @@ edited.
 
 Full design/architecture: [`docs/plans/2026-07-10-tabitha-design.md`](docs/plans/2026-07-10-tabitha-design.md).
 Progress and what's left: [`todos.md`](todos.md).
+Domain notes from Jeff (chord notation, TOC conventions, workflow): [`docs/jeff-domain-notes.md`](docs/jeff-domain-notes.md).
+Monitoring/SLOs: [`docs/monitoring.md`](docs/monitoring.md).
+Cloudflare caching: [`docs/cloudflare.md`](docs/cloudflare.md).
 
 ## Stack
 
@@ -57,7 +60,9 @@ air   # same http://localhost:8080, rebuilds on save
 See [`.env.example`](.env.example) for the full list with descriptions.
 Only `DATABASE_URL` is required to run `serve` locally — auth-related vars
 (`GOOGLE_KEY`/`GOOGLE_SECRET`/`SESSION_SECRET`/`TOKEN_ENCRYPTION_KEY`) matter
-once Google OAuth is wired up (see todos.md), and `NTFY_URL` is optional.
+once Google OAuth is wired up (see todos.md), `NTFY_URL` is optional, and
+`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ZONE_ID` are optional (see
+`docs/cloudflare.md` — auto-purges the cache on song/status changes when set).
 
 ## Pulling in Jeff's catalog
 
@@ -109,7 +114,23 @@ tabitha migrate up|down             # apply/revert tabitha's + River's schema
 tabitha jobs enqueue toc-sync       # queue a table-of-contents sync
 tabitha jobs work                   # process queued jobs once, then exit
 tabitha promote <email>             # grant an existing user the superadmin role
+tabitha healthcheck                 # self-contained /healthz check (used by Docker HEALTHCHECK)
+tabitha reparse                     # re-derive every current transcription's
+                                     # content from its stored raw_text using
+                                     # the current parser — no Google API
+                                     # calls, safe to run after any parser fix
 ```
+
+## Other routes worth knowing about
+
+- `/robots.txt`, `/sitemap.xml` — SEO; the sitemap lists the home page plus
+  every slugged song, so crawlers reach song pages the home page's
+  hide-undigested-by-default view wouldn't otherwise link to.
+- `/metrics` — Prometheus text format (request count/duration + Go runtime
+  stats). Not superadmin-gated (a scraper can't OAuth-login), but should
+  stay off the public internet in production — see `docs/monitoring.md`.
+- `/admin/jobs` — full, cursor-paginated job history (10 at a time);
+  `/admin/tools` shows just the 10 most recent plus a link there.
 
 Superadmin promotion, including `docker exec` usage: see
 [`docs/promote-admin.md`](docs/promote-admin.md).

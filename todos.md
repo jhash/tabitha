@@ -109,19 +109,73 @@ full design doc and implementation plan this tracks against.
 ## In progress / next up
 
 - [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
-- [ ] Sitemap + per-page meta tags
+- [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
+      placeholder at `/songs/{id}/edit`
+- [ ] River job-queue Prometheus metrics (see `docs/monitoring.md` — not
+      built yet, `/admin/jobs` + psql are the current way to check for
+      stuck jobs)
+
+## Done (2026-07-11 session)
+
+- [x] Sitemap (`/sitemap.xml`) + `robots.txt` + Open Graph meta tags
+      (`og:title`/`og:description`/`og:type` on every page)
+- [x] Monitoring: `/metrics` (Prometheus text format — request
+      count/duration + Go runtime stats), `docs/monitoring.md` spelling out
+      the actual SLOs (100ms p95 public-render, <0.1% 5xx rate) and what's
+      NOT covered (job-queue metrics, alerting, tracing)
+- [x] Cloudflare auto-purge on song/status changes
+      (`internal/cloudflare`, wired into `digest_song`/`toc_sync`/status
+      handlers) — **not verified against a real Cloudflare account**, only
+      against a mock server; needs `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ZONE_ID`
+      to do anything at all. See `docs/cloudflare.md`.
+- [x] **Real, catalog-wide parser bug found and fixed**: `chordTokenRe`
+      required the full word "min" for a minor chord — the standard
+      bare-`m` shorthand (`Bm`, `Em`, `Am`...) never matched, silently
+      losing chord detection (bolding, chord-word rendering) for *any*
+      chord line using it. Affected ~1410 of ~1500 transcription
+      versions — nearly the whole catalog. Also fixed: `∆`/`Δ`
+      (major7 shorthand, 584 versions) and Unicode fraction glyphs in
+      section headers like "CHORUS ½:" (32 versions). Found by tracing
+      why some chords on a real song page weren't bolded; fixed via
+      `tabitha reparse` against the whole catalog (0 round-trip
+      mismatches afterward, no re-digestion/Google API calls needed).
+- [x] Responsive chord-chart rendering: chords no longer reconstruct
+      fixed-width monospace columns — each chord+word is its own
+      wrappable flex item, so charts reflow on mobile instead of forcing
+      horizontal scroll. No data-model change needed (the token stream
+      was already ChordPro-equivalent positionally). Verified in-browser
+      at 1280px and ~375-469px.
+- [x] Slugs (`songs.slug`, assigned during `toc_sync`, artist-suffix on
+      collision) — `/songs/{slug}` is canonical, `/songs/{id}` 301s to it.
+- [x] Home page: hide-undigested-by-default filter, bulk/inline Status
+      editing for superadmins, dedup-match fix for artist name format
+      differences (byline vs. TOC), Source column added then removed per
+      feedback (see `songs.source_site` — a plain constant now, not
+      URL-derived).
+- [x] Bold + upper-cased chord keys on song show pages.
+- [x] `/admin/jobs` — full paginated job history, separate from
+      `/admin/tools`'s 10-most-recent view.
+- [x] Content-hash cache-busting for static assets (root-caused a
+      production stale-CSS incident — no Cloudflare purge, no explicit
+      Cache-Control, so Cloudflare's own default policy served style.css
+      stale for ~1h43m with nothing to invalidate it).
+- [x] Google OAuth refresh-token bug: goth's Google provider wasn't
+      requesting `access_type=offline`/`prompt=consent`, so a stored
+      token could end up with no refresh_token and `digest_song` jobs
+      failed once the access token aged out. Fixed; requires re-login at
+      `/auth/google` in production to take effect.
 
 ## Explicitly paused (Jake's call, 2026-07-10) — not abandoned
 
-- [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
-      placeholder at `/songs/{id}/edit`
-- [ ] Monitoring/SLO dashboards for the <100ms public-render target
-- [ ] Cloudflare CDN + auto-purge on song change
+*(all three of these were un-paused and finished in the 2026-07-11
+session above — kept here for history)*
 
 ### Parser classification gaps found against the two new real fixtures
 
-Round-trip is safe on both (see Done above) — these are about the parser
-producing richer structure, not fixing corruption:
+Round-trip is safe on all fixtures (see Done above) — these are about the
+parser producing richer structure, not fixing corruption. Two of the four
+gaps originally listed here are now fixed (see 2026-07-11 Done above:
+lowercase section-header suffix, fraction glyphs); these two remain open:
 
 - Section headers with real content on the *same* line get missed and
   fall back to an opaque `TextLine` (safe, just unstructured): e.g.
@@ -129,11 +183,6 @@ producing richer structure, not fixing corruption:
   `OUTRO: x4 ish` (Eye of the Tiger), `INSTRUMENTAL:  C  F  G  F  C  x2  C
   Wellllll` (Great Balls of Fire). Current `sectionHeaderRe` requires the
   colon to be the last character on the line.
-- Section headers with a lowercase letter suffix don't match:
-  `VERSE 1a:` — `sectionHeaderRe`'s char class doesn't allow lowercase.
-- Multi-word parenthesized chord groups (space inside the parens) don't
-  get recognized as a single chord-line token, since tokenization splits
-  on whitespace first: `(/F /F /F#  G)`, `(/G /A /B /C)`.
 - A line combining multiple repeat-references plus new content misses
   entirely: `(CHORUS)   (VERSE 3)                END: (C) (C) (C)` — falls
   back to opaque `TextLine`. Note `(VERSE 3)` references a *specific*
