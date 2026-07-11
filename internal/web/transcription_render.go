@@ -2,7 +2,6 @@ package web
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	g "maragu.dev/gomponents"
 	. "maragu.dev/gomponents/html"
@@ -10,59 +9,89 @@ import (
 	"github.com/jhash/tabitha/internal/transcription"
 )
 
-// renderTranscriptionHTML mirrors transcription.Render's column-alignment
-// logic, but emits chords as bolded, upper-cased <b> nodes instead of plain
-// text — matching how chords appear in Jeff's Google Docs. transcription.Render
-// itself must stay untouched: it round-trips raw text byte-for-byte and is
-// relied on elsewhere for that guarantee.
-func renderTranscriptionHTML(blocks []transcription.Block) g.Node {
-	var nodes []g.Node
-	for i, b := range blocks {
-		if i > 0 {
-			nodes = append(nodes, g.Text("\n"))
-		}
-		switch b.Kind {
-		case transcription.SectionHeader, transcription.TextLine:
-			nodes = append(nodes, g.Text(b.Text))
-		case transcription.ChordOnlyLine:
-			nodes = append(nodes, chordLineNodes(b.Tokens, b.Annotation)...)
-		case transcription.ChordLyricPair:
-			nodes = append(nodes, chordLineNodes(b.Tokens, b.Annotation)...)
-			nodes = append(nodes, g.Text("\n"))
-			nodes = append(nodes, g.Text(lyricLineText(b.Tokens)))
-		}
-	}
-	return Pre(Class("transcription"), g.Group(nodes))
+// chordWord is one wrappable chord-chart unit: a chord (possibly empty,
+// for a lyric word with no chord change) glued to the single lyric word it
+// sits above. Rendering each of these as its own flex item — rather than
+// reconstructing fixed monospace columns — is what lets a chord chart
+// reflow on a narrow screen without losing which word each chord belongs
+// to (see TestRenderTranscriptionHTMLEachChordWordIsIndependentlyWrappable).
+type chordWord struct {
+	Chord string
+	Word  string
 }
 
-func chordLineNodes(tokens []transcription.Token, annotation string) []g.Node {
-	var nodes []g.Node
-	col := 0
-	chordLen := 0
+// splitIntoChordWords walks a ChordLyricPair/ChordOnlyLine's token stream
+// and regroups it at word granularity: a chord token attaches to the next
+// real word encountered (matching how the original space-aligned chart
+// read — a chord sits above the word that follows it), consecutive chords
+// with no lyric between them each become their own chordless-word entry,
+// and synthetic alignment padding (meaningless once we're not
+// reconstructing fixed columns) is dropped entirely.
+func splitIntoChordWords(tokens []transcription.Token) []chordWord {
+	var words []chordWord
+	pendingChord := ""
+	havePending := false
 	for _, t := range tokens {
 		if t.Chord != "" {
-			if col > chordLen {
-				nodes = append(nodes, g.Text(strings.Repeat(" ", col-chordLen)))
-				chordLen = col
+			if havePending {
+				words = append(words, chordWord{Chord: pendingChord})
 			}
-			nodes = append(nodes, B(g.Text(strings.ToUpper(t.Chord))))
-			chordLen += utf8.RuneCountInString(t.Chord)
-		} else {
-			col += utf8.RuneCountInString(t.Text)
+			pendingChord = t.Chord
+			havePending = true
+			continue
+		}
+		if t.Synthetic {
+			continue
+		}
+		for _, w := range strings.Fields(t.Text) {
+			if havePending {
+				words = append(words, chordWord{Chord: pendingChord, Word: w})
+				pendingChord = ""
+				havePending = false
+			} else {
+				words = append(words, chordWord{Word: w})
+			}
 		}
 	}
-	if annotation != "" {
-		nodes = append(nodes, g.Text(annotation))
+	if havePending {
+		words = append(words, chordWord{Chord: pendingChord})
 	}
-	return nodes
+	return words
 }
 
-func lyricLineText(tokens []transcription.Token) string {
-	var b strings.Builder
-	for _, t := range tokens {
-		if t.Chord == "" && !t.Synthetic {
-			b.WriteString(t.Text)
+// renderTranscriptionHTML renders a parsed transcription for display: each
+// chord-word wraps independently (see chordWord) instead of relying on a
+// monospace <pre> grid, so a chord chart reflows readably on narrow
+// screens instead of requiring horizontal scrolling. transcription.Render
+// itself must stay untouched — it round-trips raw text byte-for-byte and
+// is relied on elsewhere for that guarantee; this is a separate,
+// display-only rendering path over the same token stream.
+func renderTranscriptionHTML(blocks []transcription.Block) g.Node {
+	nodes := make([]g.Node, len(blocks))
+	for i, b := range blocks {
+		switch b.Kind {
+		case transcription.SectionHeader:
+			nodes[i] = Div(Class("section-header"), g.Text(b.Text))
+		case transcription.TextLine:
+			nodes[i] = Div(Class("text-line"), g.Text(b.Text))
+		case transcription.ChordOnlyLine, transcription.ChordLyricPair:
+			nodes[i] = chordLineNode(b)
 		}
 	}
-	return b.String()
+	return Div(Class("transcription"), g.Group(nodes))
+}
+
+func chordLineNode(b transcription.Block) g.Node {
+	words := splitIntoChordWords(b.Tokens)
+	children := make([]g.Node, 0, len(words)+1)
+	for _, w := range words {
+		children = append(children, Span(Class("chord-word"),
+			Span(Class("chord"), g.Text(strings.ToUpper(w.Chord))),
+			Span(Class("lyric"), g.Text(w.Word)),
+		))
+	}
+	if b.Annotation != "" {
+		children = append(children, Span(Class("annotation"), g.Text(b.Annotation)))
+	}
+	return Div(Class("chord-line"), g.Group(children))
 }

@@ -45,7 +45,7 @@ func TestSongShowWithoutVersionShowsNotYetDigestedMessage(t *testing.T) {
 	}
 }
 
-func TestSongShowRendersTranscriptionPreservingAlignment(t *testing.T) {
+func TestSongShowRendersTranscriptionAsWrappableChordWords(t *testing.T) {
 	blocks := []transcription.Block{
 		{Kind: transcription.SectionHeader, Text: "CHORUS:"},
 		{
@@ -61,14 +61,17 @@ func TestSongShowRendersTranscriptionPreservingAlignment(t *testing.T) {
 	if !strings.Contains(html, "CHORUS:") {
 		t.Error("expected section header to render")
 	}
-	// Byte-for-byte alignment only survives in a whitespace-preserving
-	// element — assert it's actually inside a <pre>, not stripped into a
-	// normal paragraph where the browser would collapse the spacing.
-	if !strings.Contains(html, "<pre") {
-		t.Error("expected transcription to render inside a <pre> element to preserve chord alignment")
+	// Chords render per-word (see chordWord/splitIntoChordWords) rather
+	// than inside a monospace <pre> — that's what lets the chart reflow
+	// on narrow screens instead of requiring horizontal scrolling.
+	if strings.Contains(html, "<pre") {
+		t.Error("expected no <pre> element — chord charts now wrap via chord-word flex items, not monospace columns")
 	}
-	if !strings.Contains(html, "E") || !strings.Contains(html, "I can&#39;t get no satisfaction") {
-		t.Errorf("expected chord and lyric text to render, got: %s", html)
+	if !strings.Contains(html, `<span class="chord">E</span>`) {
+		t.Errorf("expected the E chord to render in its own span, got: %s", html)
+	}
+	if !strings.Contains(html, "can&#39;t") || !strings.Contains(html, "satisfaction") {
+		t.Errorf("expected lyric words to render, got: %s", html)
 	}
 }
 

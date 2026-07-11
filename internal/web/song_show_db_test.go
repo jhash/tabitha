@@ -149,10 +149,15 @@ func TestFullPipelineRealSatisfactionFileParseStoreFetchRender(t *testing.T) {
 		t.Errorf("full pipeline did not reproduce the original file byte-for-byte.\ngot:\n%s\nwant:\n%s", rendered, raw)
 	}
 
-	// And the HTML page itself must contain that exact text inside a <pre>,
-	// proving the alignment survives all the way to what a browser renders.
+	// And the HTML page itself must render the real content — as
+	// wrappable chord-word units, not a monospace <pre> (see
+	// transcription_render.go) — proving the full pipeline reaches what a
+	// browser renders.
 	html := renderSongShow(t, song, blocks, hasVersion, false)
-	if !strings.Contains(html, "<pre") {
-		t.Error("expected the transcription inside a <pre> element")
+	if !strings.Contains(html, `class="transcription"`) {
+		t.Error("expected the transcription container to render")
+	}
+	if !strings.Contains(html, `class="chord-word"`) {
+		t.Error("expected chord-word units to render")
 	}
 }
