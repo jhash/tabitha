@@ -91,7 +91,8 @@ func HomeHandler(q *db.Queries) http.HandlerFunc {
 		}
 
 		viewer, _ := auth.UserFromContext(r.Context())
-		page := PageWide("Songs", "Jeff's music transcription catalog", nil, viewer.Role == db.UserRoleSuperadmin, homeContent(songs, params, statuses, addedByUsers))
+		viewerIsSuperadmin := viewer.Role == db.UserRoleSuperadmin
+		page := PageWide("Songs", "Jeff's music transcription catalog", nil, viewerIsSuperadmin, homeContent(songs, params, statuses, addedByUsers, viewerIsSuperadmin))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}
@@ -165,11 +166,36 @@ func withSort(p SongQueryParams, column string) string {
 	return "/?" + v.Encode()
 }
 
-func homeContent(songs []SongRow, params SongQueryParams, statuses []string, addedByUsers []db.ListDistinctAddedByUsersRow) g.Node {
+func homeContent(songs []SongRow, params SongQueryParams, statuses []string, addedByUsers []db.ListDistinctAddedByUsersRow, viewerIsSuperadmin bool) g.Node {
 	return Div(
 		H1(g.Text("Songs")),
 		searchAndFilterForm(params, statuses, addedByUsers),
-		homeTable(songs, params),
+		homeTable(songs, params, statuses, viewerIsSuperadmin),
+		g.If(viewerIsSuperadmin, bulkStatusBar(statuses)),
+	)
+}
+
+// bulkStatusBar lets a superadmin set the status of every checked row at
+// once. Deliberately outside any <form>: htmx's default parameter
+// collection walks up to the closest enclosing <form>, which would have
+// meant every per-row inline status select (see homeTable) accidentally
+// submitting every checked checkbox too. hx-include instead names exactly
+// what this one action should gather, wherever those elements live in the
+// document.
+func bulkStatusBar(statuses []string) g.Node {
+	return P(Class("bulk-status-bar"),
+		g.Text("Set status of selected songs to: "),
+		Select(ID("bulk-status-select"),
+			g.Map(statuses, func(s string) g.Node {
+				return Option(Value(s), g.Text(s))
+			}),
+		),
+		Button(
+			Type("button"),
+			g.Attr("hx-post", "/admin/songs/bulk-status"),
+			g.Attr("hx-include", "[name='ids']:checked, #bulk-status-select"),
+			g.Text("Apply"),
+		),
 	)
 }
 
@@ -204,10 +230,11 @@ func searchAndFilterForm(params SongQueryParams, statuses []string, addedByUsers
 	)
 }
 
-func homeTable(songs []SongRow, params SongQueryParams) g.Node {
+func homeTable(songs []SongRow, params SongQueryParams, statuses []string, viewerIsSuperadmin bool) g.Node {
 	return Table(
 		THead(
 			Tr(
+				g.If(viewerIsSuperadmin, Th()),
 				sortHeader("Title", "title", params),
 				sortHeader("Artist", "artist", params),
 				sortHeader("Status", "status", params),
@@ -220,9 +247,10 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 			g.Map(songs, func(s SongRow) g.Node {
 				return Tr(
 					g.If(!s.HasVersion, Class("no-version")),
+					g.If(viewerIsSuperadmin, Td(Input(Type("checkbox"), Name("ids"), Value(fmt.Sprintf("%d", s.ID))))),
 					Td(A(Href(songHref(s)), g.Text(s.Title))),
 					Td(g.Text(s.Artist)),
-					Td(g.Text(s.Status)),
+					statusCell(s, statuses, viewerIsSuperadmin),
 					Td(g.Text(formatDate(effectiveUpdatedAt(s)))),
 					Td(g.Text(formatDate(effectiveAddedAt(s)))),
 					Td(g.Text(addedByLabel(s))),
@@ -230,6 +258,25 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 			}),
 		),
 	)
+}
+
+// statusCell renders the Status column as plain text for regular viewers,
+// or an inline-editable select for superadmins — hx-swap="none" because
+// the <select>'s own value already reflects the new status the instant
+// the browser applies the change; no row re-render is needed.
+func statusCell(s SongRow, statuses []string, viewerIsSuperadmin bool) g.Node {
+	if !viewerIsSuperadmin {
+		return Td(g.Text(s.Status))
+	}
+	return Td(Select(
+		g.Attr("hx-post", fmt.Sprintf("/admin/songs/%d/status", s.ID)),
+		g.Attr("hx-trigger", "change"),
+		g.Attr("hx-swap", "none"),
+		Name("status"),
+		g.Map(statuses, func(opt string) g.Node {
+			return Option(Value(opt), g.If(opt == s.Status, Selected()), g.Text(opt))
+		}),
+	))
 }
 
 // songHref prefers a song's slug (the canonical URL) over its numeric ID,

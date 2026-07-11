@@ -29,8 +29,13 @@ func sampleSongRows() []SongRow {
 
 func renderHomeTable(t *testing.T, songs []SongRow, params SongQueryParams) string {
 	t.Helper()
+	return renderHomeTableAs(t, songs, params, []string{"Done", "Quality Check"}, false)
+}
+
+func renderHomeTableAs(t *testing.T, songs []SongRow, params SongQueryParams, statuses []string, viewerIsSuperadmin bool) string {
+	t.Helper()
 	var buf bytes.Buffer
-	if err := homeTable(songs, params).Render(&buf); err != nil {
+	if err := homeTable(songs, params, statuses, viewerIsSuperadmin).Render(&buf); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	return buf.String()
@@ -57,6 +62,68 @@ func TestHomeTableLinksBySlugWhenSet(t *testing.T) {
 	}
 	if strings.Contains(html, `href="/songs/2"`) {
 		t.Errorf("expected no ID-based link once a slug is set, got: %s", html)
+	}
+}
+
+func TestHomeTableShowsPlainStatusTextForRegularViewers(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	html := renderHomeTableAs(t, songs, SongQueryParams{Sort: "title"}, []string{"Done"}, false)
+	if strings.Contains(html, "<select") {
+		t.Errorf("expected no editable status select for non-superadmins, got: %s", html)
+	}
+	if !strings.Contains(html, "Done") {
+		t.Errorf("expected plain status text to render, got: %s", html)
+	}
+}
+
+func TestHomeTableShowsInlineStatusSelectForSuperadmins(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	html := renderHomeTableAs(t, songs, SongQueryParams{Sort: "title"}, []string{"Done", "Quality Check"}, true)
+	if !strings.Contains(html, `hx-post="/admin/songs/2/status"`) {
+		t.Errorf("expected an inline status select posting to /admin/songs/2/status, got: %s", html)
+	}
+	if !strings.Contains(html, `value="Done" selected`) {
+		t.Errorf("expected the current status selected, got: %s", html)
+	}
+}
+
+func TestHomeTableShowsBulkSelectCheckboxesForSuperadmins(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	html := renderHomeTableAs(t, songs, SongQueryParams{Sort: "title"}, []string{"Done"}, true)
+	if !strings.Contains(html, `name="ids" value="2"`) {
+		t.Errorf("expected a bulk-select checkbox for song 2, got: %s", html)
+	}
+}
+
+func TestHomeContentShowsBulkStatusBarForSuperadmins(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	var buf bytes.Buffer
+	if err := homeContent(songs, SongQueryParams{Sort: "title"}, []string{"Done"}, nil, true).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `/admin/songs/bulk-status`) {
+		t.Errorf("expected a bulk status action posting to /admin/songs/bulk-status, got: %s", html)
+	}
+}
+
+func TestHomeContentOmitsBulkStatusBarForRegularViewers(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	var buf bytes.Buffer
+	if err := homeContent(songs, SongQueryParams{Sort: "title"}, []string{"Done"}, nil, false).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if strings.Contains(html, "bulk-status") {
+		t.Errorf("expected no bulk status bar for regular viewers, got: %s", html)
+	}
+}
+
+func TestHomeTableOmitsBulkControlsForRegularViewers(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	html := renderHomeTableAs(t, songs, SongQueryParams{Sort: "title"}, []string{"Done"}, false)
+	if strings.Contains(html, `name="ids"`) || strings.Contains(html, "bulk-status") {
+		t.Errorf("expected no bulk controls for non-superadmins, got: %s", html)
 	}
 }
 

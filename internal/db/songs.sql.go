@@ -436,6 +436,34 @@ func (q *Queries) SetSongSlug(ctx context.Context, arg SetSongSlugParams) error 
 	return err
 }
 
+const setSongStatus = `-- name: SetSongStatus :exec
+UPDATE songs SET status = $2, updated_at = now() WHERE id = $1
+`
+
+type SetSongStatusParams struct {
+	ID     int64  `json:"id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) SetSongStatus(ctx context.Context, arg SetSongStatusParams) error {
+	_, err := q.db.Exec(ctx, setSongStatus, arg.ID, arg.Status)
+	return err
+}
+
+const setSongsStatusBulk = `-- name: SetSongsStatusBulk :exec
+UPDATE songs SET status = $2, updated_at = now() WHERE id = ANY($1::bigint[])
+`
+
+type SetSongsStatusBulkParams struct {
+	Column1 []int64 `json:"column_1"`
+	Status  string  `json:"status"`
+}
+
+func (q *Queries) SetSongsStatusBulk(ctx context.Context, arg SetSongsStatusBulkParams) error {
+	_, err := q.db.Exec(ctx, setSongsStatusBulk, arg.Column1, arg.Status)
+	return err
+}
+
 const upsertSongFromTOC = `-- name: UpsertSongFromTOC :one
 INSERT INTO songs (
     title, artist, genre, film_show_album, decade, bob_tag, status,

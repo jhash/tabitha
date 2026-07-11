@@ -78,3 +78,9 @@ SELECT id, slug FROM songs WHERE slug <> '';
 
 -- name: SetSongSlug :exec
 UPDATE songs SET slug = $2 WHERE id = $1;
+
+-- name: SetSongStatus :exec
+UPDATE songs SET status = $2, updated_at = now() WHERE id = $1;
+
+-- name: SetSongsStatusBulk :exec
+UPDATE songs SET status = $2, updated_at = now() WHERE id = ANY($1::bigint[]);
