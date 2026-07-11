@@ -70,8 +70,8 @@ func currentVersionBlocks(ctx context.Context, q *db.Queries, song db.Song) ([]t
 func songShowContent(song db.Song, blocks []transcription.Block, key string, hasVersion, viewerIsSuperadmin bool) g.Node {
 	return Div(
 		H1(g.Text(song.Title)),
-		P(Class("byline"), g.Text("As performed by "+song.Artist)),
-		g.If(key != "", P(Class("key"), g.Text("Key: "+key))),
+		g.If(song.Artist != "", P(Class("byline"), g.Text("As performed by "+song.Artist))),
+		g.If(key != "", P(Class("key"), g.Text("Key: "), B(g.Text(strings.ToUpper(key))))),
 		g.If(viewerIsSuperadmin,
 			P(Class("admin-affordance"), A(Href(fmt.Sprintf("/songs/%d/edit", song.ID)), g.Text("Edit"))),
 		),
@@ -79,7 +79,7 @@ func songShowContent(song db.Song, blocks []transcription.Block, key string, has
 			P(Class("no-content"), g.Text("This song hasn't been digested from Jeff's Google Doc yet.")),
 		),
 		g.If(hasVersion,
-			Pre(Class("transcription"), g.Text(transcription.Render(omitDuplicateHeaderLines(blocks, song)))),
+			renderTranscriptionHTML(omitDuplicateHeaderLines(blocks, song)),
 		),
 	)
 }
@@ -99,7 +99,7 @@ func omitDuplicateHeaderLines(blocks []transcription.Block, song db.Song) []tran
 	} else {
 		return blocks
 	}
-	if i < len(blocks) && isDuplicateLine(blocks[i], "As performed by: "+song.Artist) {
+	if i < len(blocks) && isDuplicateArtistLine(blocks[i], song.Artist) {
 		i++
 	}
 	if i < len(blocks) && blocks[i].Kind == transcription.TextLine && strings.HasPrefix(strings.ToLower(strings.TrimSpace(blocks[i].Text)), "key:") {
@@ -110,6 +110,34 @@ func omitDuplicateHeaderLines(blocks []transcription.Block, song db.Song) []tran
 
 func isDuplicateLine(b transcription.Block, want string) bool {
 	return b.Kind == transcription.TextLine && strings.EqualFold(normalizeWhitespace(b.Text), normalizeWhitespace(want))
+}
+
+// isDuplicateArtistLine checks a doc's "As performed by: <artist>" line
+// against the stored artist, tolerating Jeff's TOC "Sortname, The" form vs
+// a doc's own natural-order byline ("Rolling Stones, the" vs "The Rolling
+// Stones") — same artist, different word order.
+func isDuplicateArtistLine(b transcription.Block, artist string) bool {
+	if b.Kind != transcription.TextLine {
+		return false
+	}
+	const prefix = "as performed by:"
+	text := normalizeWhitespace(b.Text)
+	lower := strings.ToLower(text)
+	if !strings.HasPrefix(lower, prefix) {
+		return false
+	}
+	docArtist := strings.TrimSpace(text[len(prefix):])
+	return normalizeArtistName(docArtist) == normalizeArtistName(artist)
+}
+
+// normalizeArtistName strips a leading "The " or trailing ", the" (either
+// convention for the same artist) and lowercases, so sort-friendly and
+// natural-order forms compare equal.
+func normalizeArtistName(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, ", the")
+	n = strings.TrimPrefix(n, "the ")
+	return strings.TrimSpace(n)
 }
 
 // normalizeWhitespace collapses runs of whitespace to a single space and

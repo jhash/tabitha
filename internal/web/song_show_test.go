@@ -116,8 +116,8 @@ func TestSongShowDisplaysKeyFromDatabaseNotRawText(t *testing.T) {
 	// not from re-parsing the raw text at render time.
 	html := renderSongShowWithKey(t, song, blocks, "A", true, false)
 
-	if !strings.Contains(html, "Key: A") {
-		t.Errorf("expected the database-sourced key \"A\" to render, got: %s", html)
+	if !strings.Contains(html, "Key: ") || !strings.Contains(html, "<b>A</b>") {
+		t.Errorf("expected the database-sourced key \"A\" to render bolded, got: %s", html)
 	}
 }
 
@@ -152,6 +152,39 @@ func TestSongShowKeepsTranscriptionWhenFirstLinesDontMatchTitleArtist(t *testing
 
 	if !strings.Contains(html, "INTRO:") || !strings.Contains(html, "some other content") {
 		t.Errorf("expected transcription content to render unmodified, got: %s", html)
+	}
+}
+
+func TestSongShowOmitsByLineNoArtistSet(t *testing.T) {
+	song := db.Song{Title: "Instrumental Sketch", Artist: ""}
+	html := renderSongShow(t, song, nil, false, false)
+	if strings.Contains(html, "As performed by") {
+		t.Errorf("expected no byline when artist is blank, got: %s", html)
+	}
+}
+
+func TestSongShowOmitsDuplicateBylineWhenDocUsesDifferentArtistNameFormat(t *testing.T) {
+	// Real bug: Jeff's TOC stores the sort-friendly "Rolling Stones, the",
+	// but the doc's own byline says "The Rolling Stones" — same artist,
+	// different word order/casing. Dedup must normalize both sides
+	// instead of requiring an exact string match.
+	blocks := []transcription.Block{
+		{Kind: transcription.TextLine, Text: "(I Can't Get No) Satisfaction"},
+		{Kind: transcription.TextLine, Text: "As performed by: The Rolling Stones"},
+		{Kind: transcription.TextLine, Text: "Key:  E, Original E"},
+		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
+	}
+	song := db.Song{Title: "(I Can't Get No) Satisfaction", Artist: "Rolling Stones, the"}
+	html := renderSongShowWithKey(t, song, blocks, "E", true, false)
+
+	if strings.Count(html, "Satisfaction") != 1 {
+		t.Errorf("want title to appear exactly once, got %d times: %s", strings.Count(html, "Satisfaction"), html)
+	}
+	if strings.Count(html, "Rolling Stones") != 1 {
+		t.Errorf("want artist to appear exactly once, got %d times: %s", strings.Count(html, "Rolling Stones"), html)
+	}
+	if strings.Count(html, "Key:") != 1 {
+		t.Errorf("want \"Key:\" to appear exactly once, got %d times: %s", strings.Count(html, "Key:"), html)
 	}
 }
 
