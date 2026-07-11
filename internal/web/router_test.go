@@ -455,6 +455,44 @@ func TestHealthzRouteIsWiredAndPublic(t *testing.T) {
 	}
 }
 
+func TestRobotsTxtRouteIsWiredAndPublic(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{AppURL: "https://tabitha.jakehash.com"}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /robots.txt status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Sitemap: https://tabitha.jakehash.com/sitemap.xml") {
+		t.Errorf("expected a Sitemap directive, got: %s", rec.Body.String())
+	}
+}
+
+func TestSitemapRouteIsWiredAndPublic(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{AppURL: "https://tabitha.jakehash.com"}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/sitemap.xml", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /sitemap.xml status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "https://tabitha.jakehash.com/songs/africa") {
+		t.Errorf("expected the song's URL in the sitemap, got: %s", rec.Body.String())
+	}
+}
+
 func TestSongEditRouteRequires404ForAnonymousViewer(t *testing.T) {
 	t.Cleanup(goth.ClearProviders)
 	q := setupTestQueries(t)

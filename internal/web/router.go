@@ -29,6 +29,8 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.Handle("/static/*", staticCacheHeaders(http.StripPrefix("/static/", fileServer)))
 
 	r.Get("/healthz", HealthzHandler(q))
+	r.Get("/robots.txt", RobotsTxtHandler(cfg.AppURL))
+	r.Get("/sitemap.xml", SitemapHandler(q, cfg.AppURL))
 	r.Get("/", HomeHandler(q))
 	r.Get("/songs/{idOrSlug}", SongShowHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/edit", SongEditHandler(q))

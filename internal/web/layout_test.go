@@ -98,6 +98,33 @@ func TestPageSetsTitleAndDescription(t *testing.T) {
 	}
 }
 
+func TestPageSetsOpenGraphTags(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Page("My Song", "A great song", nil, false).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `property="og:title" content="My Song"`) {
+		t.Errorf("expected an og:title meta tag, got: %s", html)
+	}
+	if !strings.Contains(html, `property="og:description" content="A great song"`) {
+		t.Errorf("expected an og:description meta tag, got: %s", html)
+	}
+	if !strings.Contains(html, `property="og:type" content="website"`) {
+		t.Errorf("expected an og:type meta tag, got: %s", html)
+	}
+}
+
+func TestPageOmitsOpenGraphDescriptionWhenBlank(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Page("My Song", "", nil, false).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if strings.Contains(buf.String(), "og:description") {
+		t.Error("expected no og:description meta tag when description is blank")
+	}
+}
+
 func TestCSSDefinesFontFaceForLora(t *testing.T) {
 	css := readRepoFile(t, "static/css/style.css")
 	if !strings.Contains(css, "@font-face") {

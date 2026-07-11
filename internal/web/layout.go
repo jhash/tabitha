@@ -47,6 +47,9 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 		Head: g.Group{
 			// charset and viewport meta tags are already inserted by
 			// components.HTML5 itself — don't duplicate them here.
+			Meta(g.Attr("property", "og:title"), Content(title)),
+			g.If(description != "", Meta(g.Attr("property", "og:description"), Content(description))),
+			Meta(g.Attr("property", "og:type"), Content("website")),
 			Link(
 				Rel("preload"),
 				Href(versionedHref("/static/fonts/Lora-Variable.woff2", assets.LoraVariable)),

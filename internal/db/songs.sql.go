@@ -278,6 +278,35 @@ func (q *Queries) ListSongIDsWithoutCurrentVersion(ctx context.Context, limit in
 	return items, nil
 }
 
+const listSongSlugsForSitemap = `-- name: ListSongSlugsForSitemap :many
+SELECT slug, updated_at FROM songs WHERE slug <> '' ORDER BY slug
+`
+
+type ListSongSlugsForSitemapRow struct {
+	Slug      string             `json:"slug"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListSongSlugsForSitemap(ctx context.Context) ([]ListSongSlugsForSitemapRow, error) {
+	rows, err := q.db.Query(ctx, listSongSlugsForSitemap)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSongSlugsForSitemapRow
+	for rows.Next() {
+		var i ListSongSlugsForSitemapRow
+		if err := rows.Scan(&i.Slug, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSongsByTitle = `-- name: ListSongsByTitle :many
 
 SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, users.name AS added_by_name, users.email AS added_by_email

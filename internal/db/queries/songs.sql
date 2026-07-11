@@ -84,3 +84,6 @@ UPDATE songs SET status = $2, updated_at = now() WHERE id = $1;
 
 -- name: SetSongsStatusBulk :exec
 UPDATE songs SET status = $2, updated_at = now() WHERE id = ANY($1::bigint[]);
+
+-- name: ListSongSlugsForSitemap :many
+SELECT slug, updated_at FROM songs WHERE slug <> '' ORDER BY slug;
