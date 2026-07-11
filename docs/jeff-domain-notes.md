@@ -40,6 +40,8 @@ newest key, but confirm with Jake before assuming). Relevant to Task 23
   - Orange = one of Jeff's cruise gigs, played in an unfinished state.
 - Categorization/genre-adjacent grouping also happens via Google Drive
   **folder structure**, separate from the sheet itself.
+- **"Pose" status** = Jeff wants the song transposed to a lower key (short
+  for "transpose"), not a typo or unrelated term.
 
 **Implication:** our current `toc_sync` job only reads the sheet's
 unauthenticated CSV export, which carries cell *values* but not
