@@ -18,6 +18,8 @@ type AssetVersions struct {
 	Style        string
 	Htmx         string
 	LoraVariable string
+	EditorJS     string
+	EditorCSS    string
 }
 
 // assets holds the process-wide asset versions, set once by NewRouter
@@ -54,6 +56,8 @@ func LoadAssetVersions(dir string) AssetVersions {
 		Style:        loadAssetVersion(dir + "/css/style.css"),
 		Htmx:         loadAssetVersion(dir + "/js/htmx.min.js"),
 		LoraVariable: loadAssetVersion(dir + "/fonts/Lora-Variable.woff2"),
+		EditorJS:     loadAssetVersion(dir + "/js/editor.js"),
+		EditorCSS:    loadAssetVersion(dir + "/css/editor.css"),
 	}
 }
 

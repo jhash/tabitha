@@ -109,11 +109,17 @@ full design doc and implementation plan this tracks against.
 ## In progress / next up
 
 - [ ] agentic docs (durable `docs/architecture.md` synced from the design doc)
-- [ ] ProseMirror editor (React island via Vite) — replaces the raw <pre>
-      placeholder at `/songs/{id}/edit`
 - [ ] River job-queue Prometheus metrics (see `docs/monitoring.md` — not
       built yet, `/admin/jobs` + psql are the current way to check for
       stuck jobs)
+- [ ] Task 23 (enable Jake's real production OAuth login, promote himself,
+      trigger a real digestion in prod) is **not something I (Claude) can
+      finish myself** — it needs Jake's own Google OAuth consent completed
+      against the running production instance, plus deploy/SSH access I
+      don't have. Everything on the code side that gates it is done and
+      already verified locally (goth wiring, refresh-token fix, promote
+      CLI/UI); what's left is Jake actually visiting `/auth/google` on the
+      production URL and running `tabitha promote <his email>` there.
 
 ## Done (2026-07-11 session)
 
@@ -164,6 +170,41 @@ full design doc and implementation plan this tracks against.
       token could end up with no refresh_token and `digest_song` jobs
       failed once the access token aged out. Fixed; requires re-login at
       `/auth/google` in production to take effect.
+- [x] ProseMirror editor (`/songs/{id}/edit`) — replaces the raw `<pre>`
+      placeholder. `editor/` (Vite + React + TS, build-time only, no
+      Node.js at runtime — bundle emits straight into `static/js/editor.js`
+      + `static/css/editor.css`, gitignored like `static/dist/`; Docker
+      builds it in its own `editor-build` stage). The document schema
+      (`editor/src/editor/schema.ts`) mirrors `internal/transcription`'s
+      Block/Token model 1:1 — each Block is a node, a chord line's Tokens
+      become a flat run of atomic `chordWord` nodes (chord over its one
+      lyric word), matching the responsive rendering from the session
+      above. `internal/web/song_editor_api.go` adds
+      `GET`/`POST /songs/{id}/editor-content` (superadmin-gated): GET
+      returns the current version's blocks as JSON, POST stores the
+      edited blocks as a new `manual_edit` transcription_versions row and
+      marks it current — original `google_doc_scrape` versions stay in
+      history. Vitest unit tests cover the Block<->ProseMirror-doc
+      conversion (chord/word splitting, annotations, round-trips); Go
+      tests cover both API endpoints end-to-end against a real Postgres.
+      Verified live in-browser against the real dev DB (song 54,
+      "Boulevard of Broken Dreams"): loaded 183 real chord-words, edited,
+      saved, reloaded — content persisted, and the public song page still
+      rendered correctly from the new manual_edit version afterward.
+- [x] Real, catalog-wide parser bug found and fixed *this session*: some
+      chords on "(I Just) Died in Your Arms Tonight" weren't bolded on the
+      song page. Root cause was `chordTokenRe` requiring the full word
+      "min" for a minor chord — the standard bare-`m` shorthand (`Bm`,
+      `Em`, `Am`...) never matched, silently losing chord classification
+      for *any* chord line using it (whole line fell back to plain
+      `TextLine`). Affected ~1410 of ~1500 transcription versions — nearly
+      the entire catalog. Also fixed in the same pass: `∆`/`Δ` (major7
+      shorthand, 584 versions) and Unicode fraction glyphs in section
+      headers like "CHORUS ½:" (32 versions). Fixed via `tabitha reparse`
+      against the whole catalog — 0 round-trip mismatches afterward, no
+      re-digestion/Google API calls needed. New real-catalog fixture
+      (`died-in-your-arms-tonight.txt`) added to the parser's round-trip
+      regression test.
 
 ## Explicitly paused (Jake's call, 2026-07-10) — not abandoned
 

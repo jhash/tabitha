@@ -45,6 +45,29 @@ func TestLoadAssetVersionReturnsEmptyForMissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadAssetVersionsHashesEditorJSAndCSS(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"js", "css"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
+			t.Fatalf("making %s dir: %v", sub, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "js", "editor.js"), []byte("console.log(1)"), 0644); err != nil {
+		t.Fatalf("writing editor.js fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "css", "editor.css"), []byte(".x{}"), 0644); err != nil {
+		t.Fatalf("writing editor.css fixture: %v", err)
+	}
+
+	v := LoadAssetVersions(dir)
+	if v.EditorJS == "" {
+		t.Error("LoadAssetVersions().EditorJS is empty, want a hash")
+	}
+	if v.EditorCSS == "" {
+		t.Error("LoadAssetVersions().EditorCSS is empty, want a hash")
+	}
+}
+
 func TestVersionedHrefAppendsVersionQueryParam(t *testing.T) {
 	got := versionedHref("/static/css/style.css", "abc123")
 	want := "/static/css/style.css?v=abc123"

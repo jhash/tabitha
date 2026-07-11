@@ -1,0 +1,69 @@
+/* Loaded alongside tabitha's own static/css/style.css on the edit page —
+   reuses its color and font custom properties rather than redefining
+   them, so the editor island matches the rest of the site. */
+
+.song-editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 1em;
+}
+
+.song-editor-toolbar button {
+  font: inherit;
+  padding: 0.4em 1em;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  background: var(--color-bg, #fff);
+  cursor: pointer;
+}
+
+.song-editor-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.song-editor-status {
+  color: var(--color-muted, #666);
+  font-size: 0.9em;
+}
+
+.song-editor-surface {
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  padding: 1em;
+  min-height: 20em;
+}
+
+.song-editor-surface .ProseMirror {
+  outline: none;
+}
+
+.song-editor-surface .section-header,
+.song-editor-surface .text-line {
+  min-height: 1.3em;
+}
+
+.song-editor-surface .chord-line {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5em;
+  row-gap: 0.2em;
+  margin: 0.1em 0;
+  align-items: flex-end;
+}
+
+.song-editor-surface .chord-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+}
+
+.song-editor-surface .chord-word .chord {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 0.85em;
+  color: var(--color-muted, #666);
+  min-height: 1.1em;
+}

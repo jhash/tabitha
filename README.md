@@ -135,6 +135,39 @@ tabitha reparse                     # re-derive every current transcription's
 Superadmin promotion, including `docker exec` usage: see
 [`docs/promote-admin.md`](docs/promote-admin.md).
 
+## Song editor (`/songs/{id}/edit`)
+
+A ProseMirror-based rich editor for a song's chord-over-lyric transcription,
+superadmin-gated, living in `editor/` (Vite + React + TypeScript). It's a
+build-time-only tool — `npm run build` there emits a fixed-name JS/CSS bundle
+straight into this repo's `static/js/editor.js` and `static/css/editor.css`
+(see `editor/vite.config.ts`), picked up by the existing Go static file
+server and content-hash cache-busting (`internal/web/assets.go`). No Node.js
+is needed at runtime; `docker build` runs the editor's build in its own
+stage (see the Dockerfile's `editor-build` stage) so the image never needs
+Node either.
+
+```sh
+cd editor
+npm install
+npm run build     # or: npm run dev, for live-reloading against http://localhost:5173
+npm test          # vitest — unit tests for the Block<->ProseMirror-doc conversion
+```
+
+`static/js/editor.js`/`static/css/editor.css` are gitignored (generated,
+like `static/dist/`) — run the build above (or `docker build`, which does it
+for you) before loading `/songs/{id}/edit` locally.
+
+The editor's document model (`editor/src/editor/schema.ts`) mirrors
+`internal/transcription`'s Block/Token model directly: each transcription
+Block becomes a ProseMirror node, and a chord line's Tokens become a flat
+run of atomic `chordWord` nodes (chord stacked above its one lyric word),
+matching the flex-based rendering `internal/web/transcription_render.go`
+uses for the public song page. Saving posts the edited document back to
+`POST /songs/{id}/editor-content`, which stores it as a new `manual_edit`
+transcription_versions row and marks it current — the original
+`google_doc_scrape` versions stay in history, never overwritten.
+
 ## Running CLI commands on the OCI instance
 
 The running tabitha service in Docker Swarm can't access environment variables directly via `docker exec` — secrets are only mounted at startup. To run any CLI command, export the secrets as env vars first:
