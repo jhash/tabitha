@@ -455,6 +455,23 @@ func TestHealthzRouteIsWiredAndPublic(t *testing.T) {
 	}
 }
 
+func TestMetricsRouteIsWiredAndPublic(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /metrics status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "tabitha_http_requests_total") {
+		t.Errorf("expected tabitha_http_requests_total in /metrics output, got: %s", rec.Body.String())
+	}
+}
+
 func TestRobotsTxtRouteIsWiredAndPublic(t *testing.T) {
 	q := setupTestQueries(t)
 

@@ -6,6 +6,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/riverqueue/river"
 
 	"github.com/jhash/tabitha/internal/auth"
@@ -20,13 +22,23 @@ import (
 func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]) http.Handler {
 	SetAssetVersions(LoadAssetVersions("static"))
 
+	reg := prometheus.NewRegistry()
+	metrics := newRequestMetrics(reg)
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(metrics.middleware)
 	r.Use(auth.OptionalUser(q))
 
 	fileServer := http.FileServer(http.Dir("static"))
 	r.Handle("/static/*", staticCacheHeaders(http.StripPrefix("/static/", fileServer)))
+
+	// Not superadmin-gated: Prometheus scrapers can't complete an OAuth
+	// login. Only request counts/durations are exposed — nothing
+	// sensitive — but this should still be reached only from inside a
+	// private network in production, not opened to the public internet.
+	r.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
 
 	r.Get("/healthz", HealthzHandler(q))
 	r.Get("/robots.txt", RobotsTxtHandler(cfg.AppURL))
