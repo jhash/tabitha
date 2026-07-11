@@ -11,8 +11,13 @@ import (
 
 func renderSongShow(t *testing.T, song db.Song, blocks []transcription.Block, hasVersion, viewerIsSuperadmin bool) string {
 	t.Helper()
+	return renderSongShowWithKey(t, song, blocks, "", hasVersion, viewerIsSuperadmin)
+}
+
+func renderSongShowWithKey(t *testing.T, song db.Song, blocks []transcription.Block, key string, hasVersion, viewerIsSuperadmin bool) string {
+	t.Helper()
 	var buf bytes.Buffer
-	if err := songShowContent(song, blocks, hasVersion, viewerIsSuperadmin).Render(&buf); err != nil {
+	if err := songShowContent(song, blocks, key, hasVersion, viewerIsSuperadmin).Render(&buf); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	return buf.String()
@@ -78,7 +83,7 @@ func TestSongShowOmitsDuplicateTitleAndBylineFromTranscription(t *testing.T) {
 		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
 	}
 	song := db.Song{Title: "Downtown", Artist: "Petula Clark"}
-	html := renderSongShow(t, song, blocks, true, false)
+	html := renderSongShowWithKey(t, song, blocks, "E", true, false)
 
 	if strings.Count(html, "Downtown") != 1 {
 		t.Errorf("want \"Downtown\" to appear exactly once (H1 only), got %d times: %s", strings.Count(html, "Downtown"), html)
@@ -86,13 +91,33 @@ func TestSongShowOmitsDuplicateTitleAndBylineFromTranscription(t *testing.T) {
 	if strings.Count(html, "Petula Clark") != 1 {
 		t.Errorf("want \"Petula Clark\" to appear exactly once (byline only), got %d times: %s", strings.Count(html, "Petula Clark"), html)
 	}
-	// The Key line isn't a duplicate — it's new info the page's own
-	// chrome doesn't show elsewhere — so it should still render.
-	if !strings.Contains(html, "Key:  E, Original E") {
-		t.Errorf("expected the Key line to still render, got: %s", html)
+	// The Key line is sourced from the database (passed in as key) and
+	// shown once near the byline — the doc's own raw "Key: ..." line is
+	// now redundant and should be omitted from the <pre> block.
+	if strings.Count(html, "Key:") != 1 {
+		t.Errorf("want \"Key:\" to appear exactly once (from the database, not the raw doc line), got %d times: %s", strings.Count(html, "Key:"), html)
 	}
 	if !strings.Contains(html, "VERSE 1:") {
 		t.Errorf("expected the rest of the transcription to still render, got: %s", html)
+	}
+}
+
+func TestSongShowDisplaysKeyFromDatabaseNotRawText(t *testing.T) {
+	blocks := []transcription.Block{
+		{Kind: transcription.TextLine, Text: "Song"},
+		{Kind: transcription.TextLine, Text: "As performed by: Someone"},
+		{Kind: transcription.TextLine, Text: "Key:  Bb, Original A"},
+		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
+	}
+	song := db.Song{Title: "Song", Artist: "Someone"}
+	// The database's stored key (the original key, per parseKeyLine) is
+	// "A" here — different from the doc's raw "Key: Bb, Original A" line,
+	// to prove the displayed key comes from the key parameter/database,
+	// not from re-parsing the raw text at render time.
+	html := renderSongShowWithKey(t, song, blocks, "A", true, false)
+
+	if !strings.Contains(html, "Key: A") {
+		t.Errorf("expected the database-sourced key \"A\" to render, got: %s", html)
 	}
 }
 

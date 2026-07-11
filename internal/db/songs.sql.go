@@ -305,6 +305,20 @@ func (q *Queries) SetSongGoogleDocID(ctx context.Context, arg SetSongGoogleDocID
 	return err
 }
 
+const setSongPreferredKey = `-- name: SetSongPreferredKey :exec
+UPDATE songs SET preferred_key = $2, updated_at = now() WHERE id = $1
+`
+
+type SetSongPreferredKeyParams struct {
+	ID           int64  `json:"id"`
+	PreferredKey string `json:"preferred_key"`
+}
+
+func (q *Queries) SetSongPreferredKey(ctx context.Context, arg SetSongPreferredKeyParams) error {
+	_, err := q.db.Exec(ctx, setSongPreferredKey, arg.ID, arg.PreferredKey)
+	return err
+}
+
 const upsertSongFromTOC = `-- name: UpsertSongFromTOC :one
 INSERT INTO songs (
     title, artist, genre, film_show_album, decade, bob_tag, status,

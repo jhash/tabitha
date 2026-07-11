@@ -32,7 +32,7 @@ func SongEditHandler(q *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		blocks, hasVersion, err := currentVersionBlocks(r.Context(), q, song)
+		blocks, _, hasVersion, err := currentVersionBlocks(r.Context(), q, song)
 		if err != nil {
 			http.Error(w, "failed to load transcription", http.StatusInternalServerError)
 			return

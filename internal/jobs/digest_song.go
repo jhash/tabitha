@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/riverqueue/river"
 	"golang.org/x/oauth2"
@@ -92,12 +93,23 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 		return fmt.Errorf("digest_song: marshaling parsed content: %w", err)
 	}
 
+	// The version's own Key column is the original key (what the song's
+	// actually in, historically) — not necessarily what this particular
+	// doc section's chords are written in. See parseKeyLine: Jeff's docs
+	// label both explicitly ("Key: <performance>, Original <original>").
+	var key *string
+	performanceKey, originalKey, hasKey := parseKeyLine(rawText)
+	if hasKey {
+		key = &originalKey
+	}
+
 	version, err := w.Queries.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
 		SongID:  song.ID,
 		Kind:    "primary",
 		Source:  "google_doc_scrape",
 		RawText: rawText,
 		Content: content,
+		Key:     key,
 	})
 	if err != nil {
 		return fmt.Errorf("digest_song: storing transcription version: %w", err)
@@ -111,6 +123,16 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 	}
 	if err := w.Queries.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: song.ID, CurrentVersionID: &version.ID}); err != nil {
 		return fmt.Errorf("digest_song: updating song's current version: %w", err)
+	}
+
+	// Prefill the added-by user's preferred key from this doc's
+	// performance key, but only when it actually differs from the
+	// original — otherwise leave preferred_key alone (don't overwrite a
+	// value someone may have already set through the editor).
+	if hasKey && !strings.EqualFold(strings.TrimSpace(performanceKey), strings.TrimSpace(originalKey)) {
+		if err := w.Queries.SetSongPreferredKey(ctx, db.SetSongPreferredKeyParams{ID: song.ID, PreferredKey: performanceKey}); err != nil {
+			return fmt.Errorf("digest_song: setting preferred key: %w", err)
+		}
 	}
 	return nil
 }

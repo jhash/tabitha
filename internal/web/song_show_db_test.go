@@ -19,7 +19,7 @@ func TestCurrentVersionBlocksReturnsFalseWhenSongHasNoVersion(t *testing.T) {
 		t.Fatalf("UpsertSongFromTOC() error = %v", err)
 	}
 
-	blocks, hasVersion, err := currentVersionBlocks(ctx, q, song)
+	blocks, _, hasVersion, err := currentVersionBlocks(ctx, q, song)
 	if err != nil {
 		t.Fatalf("currentVersionBlocks() error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestCurrentVersionBlocksRoundTripsRealParsedContent(t *testing.T) {
 		t.Fatalf("GetSongByID() error = %v", err)
 	}
 
-	blocks, hasVersion, err := currentVersionBlocks(ctx, q, song)
+	blocks, _, hasVersion, err := currentVersionBlocks(ctx, q, song)
 	if err != nil {
 		t.Fatalf("currentVersionBlocks() error = %v", err)
 	}
@@ -136,7 +136,7 @@ func TestFullPipelineRealSatisfactionFileParseStoreFetchRender(t *testing.T) {
 		t.Fatalf("GetSongByID() error = %v", err)
 	}
 
-	blocks, hasVersion, err := currentVersionBlocks(ctx, q, song)
+	blocks, _, hasVersion, err := currentVersionBlocks(ctx, q, song)
 	if err != nil {
 		t.Fatalf("currentVersionBlocks() error = %v", err)
 	}

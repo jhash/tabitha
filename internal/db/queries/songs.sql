@@ -58,3 +58,6 @@ SELECT DISTINCT u.name, u.email
 FROM songs s
 JOIN users u ON u.id = s.added_by_user_id
 ORDER BY u.name;
+
+-- name: SetSongPreferredKey :exec
+UPDATE songs SET preferred_key = $2, updated_at = now() WHERE id = $1;
