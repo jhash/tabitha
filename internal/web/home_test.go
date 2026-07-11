@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -96,6 +97,45 @@ func TestHomeTableActiveSortColumnTogglesToDescendingLinkWhenAlreadyAscending(t 
 	}
 	if !strings.Contains(html, "order=desc&amp;sort=status") {
 		t.Errorf("expected Status header's link to toggle to order=desc, got: %s", html)
+	}
+}
+
+func TestParseSongQueryParamsDefaultsToHideUndigested(t *testing.T) {
+	p := parseSongQueryParams(url.Values{})
+	if !p.HideUndigested {
+		t.Error("HideUndigested = false on a fresh page load, want true (default on)")
+	}
+}
+
+func TestParseSongQueryParamsShowsAllWhenDigestedIsAll(t *testing.T) {
+	p := parseSongQueryParams(url.Values{"digested": {"all"}})
+	if p.HideUndigested {
+		t.Error("HideUndigested = true with digested=all, want false")
+	}
+}
+
+func TestSearchAndFilterFormDigestedSelectDefaultsToHideSelected(t *testing.T) {
+	var buf bytes.Buffer
+	if err := searchAndFilterForm(SongQueryParams{HideUndigested: true}, nil, nil).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `name="digested"`) {
+		t.Fatalf("expected a digested filter select, got: %s", html)
+	}
+	if !strings.Contains(html, `value="hide" selected`) {
+		t.Errorf(`expected the "hide" option selected by default, got: %s`, html)
+	}
+}
+
+func TestSearchAndFilterFormDigestedSelectShowsAllSelectedWhenNotHiding(t *testing.T) {
+	var buf bytes.Buffer
+	if err := searchAndFilterForm(SongQueryParams{HideUndigested: false}, nil, nil).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `value="all" selected`) {
+		t.Errorf(`expected the "all" option selected, got: %s`, html)
 	}
 }
 

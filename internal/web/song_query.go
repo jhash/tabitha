@@ -19,6 +19,9 @@ type SongQueryParams struct {
 	Order   string // "asc" or "desc"
 	Status  string
 	AddedBy string // matches a user's name or email, case-insensitively
+	// HideUndigested filters out songs with no current transcription
+	// version — the home page's default, toggleable view.
+	HideUndigested bool
 }
 
 // sortColumnExprs maps a validated sort key to its literal ORDER BY
@@ -58,6 +61,11 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 	statusParam := arg(status)
 	addedByParam := arg(addedBy)
 
+	undigestedClause := "TRUE"
+	if p.HideUndigested {
+		undigestedClause = "s.current_version_id IS NOT NULL"
+	}
+
 	var orderBy string
 	if search != "" && p.Sort == "" {
 		searchParam := arg(search)
@@ -92,10 +100,11 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 			LEFT JOIN genres g ON g.id = sg.genre_id
 			WHERE (%[1]s = '' OR s.status = %[1]s)
 			  AND (%[2]s = '' OR lower(u.name) = lower(%[2]s) OR lower(u.email) = lower(%[2]s))
+			  AND %[4]s
 			GROUP BY s.id, u.name, u.email
 		) song_data
 		ORDER BY %[3]s
-	`, statusParam, addedByParam, orderBy)
+	`, statusParam, addedByParam, orderBy, undigestedClause)
 
 	return query, args
 }

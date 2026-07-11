@@ -31,9 +31,14 @@ func configureGoogleAuth(cfg config.Config) {
 	gothic.Store = sessions.NewCookieStore([]byte(cfg.SessionSecret))
 
 	callbackURL := cfg.AppURL + "/auth/google/callback"
-	goth.UseProviders(
-		google.New(cfg.GoogleKey, cfg.GoogleSecret, callbackURL, "email", "profile", auth.GoogleDriveReadonlyScope),
-	)
+	provider := google.New(cfg.GoogleKey, cfg.GoogleSecret, callbackURL, "email", "profile", auth.GoogleDriveReadonlyScope)
+	// Google only returns a refresh_token when access_type=offline and
+	// prompt=consent are both explicit on the auth URL — otherwise a
+	// returning user's re-login silently omits it, and the stored token
+	// becomes unrefreshable once the access token expires (~1h).
+	provider.SetAccessType("offline")
+	provider.SetPrompt("consent")
+	goth.UseProviders(provider)
 }
 
 // mountAuthRoutes wires the login/callback/logout routes. These are

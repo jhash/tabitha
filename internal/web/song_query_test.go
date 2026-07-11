@@ -92,6 +92,48 @@ func equalInt64s(a, b []int64) bool {
 	return true
 }
 
+func TestBuildSongsQueryFiltersOutUndigestedWhenHideUndigestedSet(t *testing.T) {
+	query, args := buildSongsQuery(SongQueryParams{HideUndigested: true})
+	if !strings.Contains(query, "current_version_id IS NOT NULL") {
+		t.Errorf("query = %q, want it to filter on current_version_id when HideUndigested is set", query)
+	}
+	if len(args) != 2 {
+		t.Fatalf("args = %v, want 2 (status, added_by) — HideUndigested shouldn't add a placeholder", args)
+	}
+}
+
+func TestListSongsQueryHideUndigestedExcludesSongsWithoutAVersion(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	undigested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Undigested"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	digested, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Digested"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: digested.ID, Kind: "primary", Source: "google_doc_scrape", RawText: "x", Content: []byte("[]"),
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: digested.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{HideUndigested: true})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	if len(rows) != 1 || rows[0].Title != "Digested" {
+		t.Errorf("rows = %+v, want just Digested", rows)
+	}
+	_ = undigested
+}
+
 func TestListSongsQueryReportsHasVersion(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()

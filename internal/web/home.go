@@ -111,6 +111,9 @@ func parseSongQueryParams(q url.Values) SongQueryParams {
 		Order:   order,
 		Status:  q.Get("status"),
 		AddedBy: q.Get("added_by"),
+		// Hidden by default (fresh page load has no "digested" param at
+		// all) — only an explicit "all" turns the filter off.
+		HideUndigested: q.Get("digested") != "all",
 	}
 }
 
@@ -153,6 +156,9 @@ func withSort(p SongQueryParams, column string) string {
 	if p.AddedBy != "" {
 		v.Set("added_by", p.AddedBy)
 	}
+	if !p.HideUndigested {
+		v.Set("digested", "all")
+	}
 	v.Set("sort", column)
 	v.Set("order", order)
 	return "/?" + v.Encode()
@@ -186,6 +192,10 @@ func searchAndFilterForm(params SongQueryParams, statuses []string, addedByUsers
 				}
 				return Option(Value(label), g.If(label == params.AddedBy, Selected()), g.Text(label))
 			}),
+		),
+		Select(Name("digested"),
+			Option(Value("hide"), g.If(params.HideUndigested, Selected()), g.Text("Hide undigested songs")),
+			Option(Value("all"), g.If(!params.HideUndigested, Selected()), g.Text("Show all songs")),
 		),
 		Input(Type("hidden"), Name("sort"), Value(params.Sort)),
 		Input(Type("hidden"), Name("order"), Value(params.Order)),
