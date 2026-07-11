@@ -14,6 +14,7 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 	"golang.org/x/time/rate"
 
+	"github.com/jhash/tabitha/internal/cloudflare"
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 )
@@ -43,10 +44,11 @@ func MigrateUp(ctx context.Context, pool *pgxpool.Pool) error {
 // (e.g. `jobs enqueue toc-sync`, which only ever touches TocSyncWorker).
 func NewClient(pool *pgxpool.Pool, queries *db.Queries, cfg config.Config, encryptionKey []byte) (*river.Client[pgx.Tx], error) {
 	rateLimiter := rate.NewLimiter(rate.Every(time.Minute/digestSongRateLimit), 1)
+	cfClient := &cloudflare.Client{APIToken: cfg.CloudflareAPIToken, ZoneID: cfg.CloudflareZoneID}
 
 	workers := river.NewWorkers()
-	river.AddWorker(workers, &TocSyncWorker{Queries: queries})
-	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey, RateLimiter: rateLimiter})
+	river.AddWorker(workers, &TocSyncWorker{Queries: queries, AppURL: cfg.AppURL, Cloudflare: cfClient})
+	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey, RateLimiter: rateLimiter, Cloudflare: cfClient})
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{

@@ -11,6 +11,7 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/jhash/tabitha/internal/auth"
+	"github.com/jhash/tabitha/internal/cloudflare"
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 )
@@ -24,6 +25,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 
 	reg := prometheus.NewRegistry()
 	metrics := newRequestMetrics(reg)
+	cfClient := &cloudflare.Client{APIToken: cfg.CloudflareAPIToken, ZoneID: cfg.CloudflareZoneID}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -57,8 +59,8 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 		r.Get("/", AdminHomeHandler)
 		r.Get("/users", AdminUsersHandler(q))
 		r.Post("/users/{id}/promote", AdminPromoteUserHandler(q))
-		r.Post("/songs/bulk-status", AdminBulkSetSongStatusHandler(q))
-		r.Post("/songs/{id}/status", AdminSetSongStatusHandler(q))
+		r.Post("/songs/bulk-status", AdminBulkSetSongStatusHandler(q, cfg.AppURL, cfClient))
+		r.Post("/songs/{id}/status", AdminSetSongStatusHandler(q, cfg.AppURL, cfClient))
 		r.Get("/tools", AdminToolsHandler(jobClient))
 		r.Get("/jobs", AdminJobsHandler(jobClient))
 		r.Post("/tools/toc-sync", AdminTriggerTocSyncHandler(jobClient))

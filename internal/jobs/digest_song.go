@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"google.golang.org/api/sheets/v4"
 
 	"github.com/jhash/tabitha/internal/auth"
+	"github.com/jhash/tabitha/internal/cloudflare"
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/transcription"
@@ -45,6 +47,12 @@ type DigestSongWorker struct {
 	// per-job. Nil-safe: a nil limiter (e.g. in tests that never reach
 	// the API calls) just skips throttling.
 	RateLimiter *rate.Limiter
+
+	// Cloudflare purges the digested song's page (and the home page,
+	// whose table now shows it as digested) after a successful digest.
+	// Nil-safe: nil (or unconfigured — see Client.Configured) just skips
+	// purging, same as a dev environment with no Cloudflare credentials.
+	Cloudflare *cloudflare.Client
 }
 
 func (w *DigestSongWorker) wait(ctx context.Context) error {
@@ -159,7 +167,30 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 	}); err != nil {
 		return fmt.Errorf("digest_song: storing doc timestamps: %w", err)
 	}
+
+	if w.Cloudflare != nil && w.Cloudflare.Configured() {
+		if err := w.Cloudflare.PurgeURLs(ctx, []string{
+			w.Config.AppURL + "/",
+			w.Config.AppURL + "/" + songPath(song),
+		}); err != nil {
+			// Not fatal — a stale cached page is a much smaller problem
+			// than losing an otherwise-successful digest over a purge
+			// hiccup. Logged so it's visible without failing the job.
+			log.Printf("digest_song: cloudflare purge failed for song %d: %v", song.ID, err)
+		}
+	}
 	return nil
+}
+
+// songPath is a song's canonical path relative to AppURL: its slug once
+// one's been assigned (during toc_sync), falling back to its numeric ID
+// for the brief window before that happens. Mirrors web.songShowHref
+// without importing the web package from jobs.
+func songPath(song db.Song) string {
+	if song.Slug != "" {
+		return "songs/" + song.Slug
+	}
+	return fmt.Sprintf("songs/%d", song.ID)
 }
 
 func (w *DigestSongWorker) findGoogleDocID(ctx context.Context, token *oauth2.Token, title string) (string, error) {

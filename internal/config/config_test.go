@@ -41,6 +41,20 @@ func TestLoadDefaultsPortWhenUnset(t *testing.T) {
 	}
 }
 
+func TestLoadReadsCloudflareCredentials(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("CLOUDFLARE_API_TOKEN", "test-token")
+	t.Setenv("CLOUDFLARE_ZONE_ID", "test-zone")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if cfg.CloudflareAPIToken != "test-token" || cfg.CloudflareZoneID != "test-zone" {
+		t.Errorf("CloudflareAPIToken/ZoneID = %q/%q, want test-token/test-zone", cfg.CloudflareAPIToken, cfg.CloudflareZoneID)
+	}
+}
+
 func TestLoadErrorsWhenDatabaseURLMissing(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 

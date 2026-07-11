@@ -5,11 +5,13 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 
 	"github.com/riverqueue/river"
 
+	"github.com/jhash/tabitha/internal/cloudflare"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/slug"
 )
@@ -37,6 +39,15 @@ type TocSyncWorker struct {
 	// SheetURL overrides tocSheetURL. Left empty in production; tests point
 	// it at an httptest.Server instead of the real live sheet.
 	SheetURL string
+
+	// AppURL is the site's canonical origin, used only to build the home
+	// page URL to purge after a sync — empty is fine wherever Cloudflare
+	// is also nil/unconfigured.
+	AppURL string
+	// Cloudflare purges the home page (whose table/filters can change
+	// after any sync) once the sync completes. Nil-safe — see
+	// DigestSongWorker.Cloudflare.
+	Cloudflare *cloudflare.Client
 }
 
 func (w *TocSyncWorker) Work(ctx context.Context, job *river.Job[TocSyncArgs]) error {
@@ -98,6 +109,12 @@ func (w *TocSyncWorker) Work(ctx context.Context, job *river.Job[TocSyncArgs]) e
 				return fmt.Errorf("toc_sync: assigning slug for %q: %w", row.Title, err)
 			}
 			takenSlugs[newSlug] = true
+		}
+	}
+
+	if w.Cloudflare != nil && w.Cloudflare.Configured() {
+		if err := w.Cloudflare.PurgeURLs(ctx, []string{w.AppURL + "/"}); err != nil {
+			log.Printf("toc_sync: cloudflare purge failed: %v", err)
 		}
 	}
 

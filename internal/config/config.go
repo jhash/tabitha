@@ -15,6 +15,8 @@ type Config struct {
 	GoogleSecret       string
 	NtfyURL            string
 	SessionSecret      string
+	CloudflareAPIToken string
+	CloudflareZoneID   string
 }
 
 func Load() (Config, error) {
@@ -42,5 +44,7 @@ func Load() (Config, error) {
 		GoogleSecret:       os.Getenv("GOOGLE_SECRET"),
 		NtfyURL:            os.Getenv("NTFY_URL"),
 		SessionSecret:      os.Getenv("SESSION_SECRET"),
+		CloudflareAPIToken: os.Getenv("CLOUDFLARE_API_TOKEN"),
+		CloudflareZoneID:   os.Getenv("CLOUDFLARE_ZONE_ID"),
 	}, nil
 }
