@@ -83,6 +83,30 @@ func TestFindHyperlinkForTitleReturnsFalseWhenNoMatch(t *testing.T) {
 	}
 }
 
+func TestFindHyperlinkForTitleReturnsFalseWhenTitleCellHasNoHyperlink(t *testing.T) {
+	// A matched title with no hyperlink at all (never linked to a doc) must
+	// not be treated as a match — otherwise the caller tries to parse ""
+	// as a Google Doc URL and fails with a confusing error.
+	spreadsheet := &sheets.Spreadsheet{
+		Sheets: []*sheets.Sheet{
+			{
+				Data: []*sheets.GridData{
+					{
+						RowData: []*sheets.RowData{
+							{Values: []*sheets.CellData{{FormattedValue: "Title"}}},
+							{Values: []*sheets.CellData{{FormattedValue: "More Rihanna"}}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if _, ok := findHyperlinkForTitle(spreadsheet, "More Rihanna"); ok {
+		t.Error("expected no match for a title cell with no hyperlink")
+	}
+}
+
 func TestFindHyperlinkForTitleFindsTitleColumnByHeaderName(t *testing.T) {
 	// Title isn't necessarily column A — same convention as the CSV parser,
 	// which maps columns by header name rather than fixed position.

@@ -50,6 +50,9 @@ func findHyperlinkForTitle(spreadsheet *sheets.Spreadsheet, title string) (strin
 				}
 				cell := row.Values[titleCol]
 				if strings.ToLower(strings.TrimSpace(cell.FormattedValue)) == want {
+					if cell.Hyperlink == "" {
+						return "", false
+					}
 					return cell.Hyperlink, true
 				}
 			}

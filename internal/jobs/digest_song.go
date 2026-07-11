@@ -58,6 +58,11 @@ func (w *DigestSongWorker) wait(ctx context.Context) error {
 // stored token can no longer be refreshed) — see design doc Phase 2.
 var ErrNoOAuthToken = errors.New("digest_song: no usable Google OAuth token on file; log in at /auth/google first")
 
+// ErrNoGoogleDocLink means the TOC's title cell for this song has no
+// hyperlink at all (Jeff hasn't linked a doc for it yet) — retrying won't
+// fix this on its own, so Work cancels the job instead of retrying it.
+var ErrNoGoogleDocLink = errors.New("digest_song: no google doc linked")
+
 // Work handles Jeff's transpose workflow: a doc may hold more than one
 // key's transcription separated by a page break (see
 // docs/jeff-domain-notes.md). Only the original key's section — the last
@@ -78,6 +83,9 @@ func (w *DigestSongWorker) Work(ctx context.Context, job *river.Job[DigestSongAr
 	if docID == "" {
 		docID, err = w.findGoogleDocID(ctx, token, song.Title)
 		if err != nil {
+			if errors.Is(err, ErrNoGoogleDocLink) {
+				return river.JobCancel(fmt.Errorf("digest_song: %q: %w", song.Title, err))
+			}
 			return snoozeOnRateLimit(fmt.Errorf("digest_song: finding google doc id for %q: %w", song.Title, err))
 		}
 		if err := w.Queries.SetSongGoogleDocID(ctx, db.SetSongGoogleDocIDParams{ID: song.ID, GoogleDocID: docID}); err != nil {
@@ -168,7 +176,7 @@ func (w *DigestSongWorker) findGoogleDocID(ctx context.Context, token *oauth2.To
 	}
 	hyperlink, ok := findHyperlinkForTitle(spreadsheet, title)
 	if !ok {
-		return "", fmt.Errorf("no row found matching title %q", title)
+		return "", fmt.Errorf("%w: no linked Google Doc found for title %q", ErrNoGoogleDocLink, title)
 	}
 	return extractDocIDFromHyperlink(hyperlink)
 }
