@@ -20,6 +20,7 @@ import (
 	"github.com/jhash/tabitha/internal/config"
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/jobs"
+	"github.com/jhash/tabitha/internal/transcription"
 )
 
 // superadminSession creates and promotes a user, returning a session token
@@ -640,5 +641,102 @@ func TestSongShowRouteShowsEditLinkOnlyToSuperadmin(t *testing.T) {
 	adminRec := doAdminRequest(r, http.MethodGet, fmt.Sprintf("/songs/%d", song.ID), token)
 	if !strings.Contains(adminRec.Body.String(), editLink) {
 		t.Errorf("superadmin viewer should see the edit link, got: %s", adminRec.Body.String())
+	}
+}
+
+// TestGoldenPathSearchViewEditStatusAndPaginateJobs is a single, broad
+// walk through the app end to end via real HTTP requests against a real
+// router + real Postgres (no browser/JS involved — a server-rendered,
+// htmx-boosted app's "client-side behavior" is just another HTTP request,
+// so this covers the same ground a browser-driven e2e test would):
+// search finds a song by fuzzy title match, the song page renders its
+// transcription, a superadmin edits its status inline, then bulk-edits it
+// alongside another song, and the paginated admin jobs page still loads
+// after a job's been enqueued.
+func TestGoldenPathSearchViewEditStatusAndPaginateJobs(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto", Status: "Pending"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	other, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Yesterday", Artist: "The Beatles", Status: "Pending"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	content, err := transcription.MarshalDocument([]transcription.Block{{Kind: transcription.TextLine, Text: "x"}})
+	if err != nil {
+		t.Fatalf("MarshalDocument() error = %v", err)
+	}
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: song.ID, Kind: "primary", Source: "manual_edit", RawText: "x", Content: content,
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: song.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	jobClient := testJobClient(t)
+	r := NewRouter(config.Config{}, q, jobClient)
+
+	// 1. Search finds the song by fuzzy title match.
+	searchRec := httptest.NewRecorder()
+	r.ServeHTTP(searchRec, httptest.NewRequest(http.MethodGet, "/?search=afric&digested=all", nil))
+	if searchRec.Code != http.StatusOK || !strings.Contains(searchRec.Body.String(), "Africa") {
+		t.Fatalf("search step: status = %d, want 200 with Africa in body, got: %s", searchRec.Code, searchRec.Body.String())
+	}
+
+	// 2. The song page renders (canonical slug URL).
+	showRec := httptest.NewRecorder()
+	r.ServeHTTP(showRec, httptest.NewRequest(http.MethodGet, "/songs/africa", nil))
+	if showRec.Code != http.StatusOK {
+		t.Fatalf("show step: status = %d, want 200", showRec.Code)
+	}
+
+	// 3. A superadmin edits the song's status inline.
+	token, _ := superadminSession(t, q)
+	statusRec := doAdminFormRequest(r, http.MethodPost, fmt.Sprintf("/admin/songs/%d/status", song.ID), token, url.Values{"status": {"Done"}})
+	if statusRec.Code < 200 || statusRec.Code >= 300 {
+		t.Fatalf("inline status step: status = %d, want 2xx", statusRec.Code)
+	}
+	updated, err := q.GetSongByID(ctx, song.ID)
+	if err != nil {
+		t.Fatalf("GetSongByID() error = %v", err)
+	}
+	if updated.Status != "Done" {
+		t.Errorf("song status = %q after inline edit, want %q", updated.Status, "Done")
+	}
+
+	// 4. Bulk-edit both songs to a different status at once.
+	bulkRec := doAdminFormRequest(r, http.MethodPost, "/admin/songs/bulk-status", token, url.Values{
+		"status": {"Quality Check"},
+		"ids":    {fmt.Sprintf("%d", song.ID), fmt.Sprintf("%d", other.ID)},
+	})
+	if bulkRec.Code < 200 || bulkRec.Code >= 300 {
+		t.Fatalf("bulk status step: status = %d, want 2xx", bulkRec.Code)
+	}
+	for _, id := range []int64{song.ID, other.ID} {
+		s, err := q.GetSongByID(ctx, id)
+		if err != nil {
+			t.Fatalf("GetSongByID(%d) error = %v", id, err)
+		}
+		if s.Status != "Quality Check" {
+			t.Errorf("song %d status = %q after bulk edit, want %q", id, s.Status, "Quality Check")
+		}
+	}
+
+	// 5. Enqueue a job and confirm the paginated admin jobs page still loads.
+	if err := jobs.EnqueueTocSync(ctx, jobClient); err != nil {
+		t.Fatalf("EnqueueTocSync() error = %v", err)
+	}
+	jobsRec := doAdminRequest(r, http.MethodGet, "/admin/jobs", token)
+	if jobsRec.Code != http.StatusOK {
+		t.Fatalf("admin jobs step: status = %d, want 200", jobsRec.Code)
 	}
 }

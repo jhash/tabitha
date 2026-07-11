@@ -272,9 +272,12 @@ func TestParseFullSatisfactionFileRoundTrips(t *testing.T) {
 // two full transcriptions (Gm then Cm) separated by a page break — Parse
 // doesn't need to understand that structure (splitting a multi-key doc
 // into separate versions is a digestion-time concern, not a parser one),
-// it just needs to not corrupt the text.
+// it just needs to not corrupt the text. Died in Your Arms Tonight
+// exercises bare-m minor chords ("Bm") and ∆-major7 notation ("G∆") —
+// real catalog data that chordTokenRe didn't recognize until this was
+// found and fixed (see todos.md).
 func TestParseRealFixturesRoundTrip(t *testing.T) {
-	for _, name := range []string{"eye-of-the-tiger.txt", "great-balls-of-fire.txt"} {
+	for _, name := range []string{"eye-of-the-tiger.txt", "great-balls-of-fire.txt", "died-in-your-arms-tonight.txt"} {
 		t.Run(name, func(t *testing.T) {
 			raw := readFixture(t, name)
 			blocks := Parse(raw)
