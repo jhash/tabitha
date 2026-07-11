@@ -106,6 +106,7 @@ type Song struct {
 	PreferredKey     string             `json:"preferred_key"`
 	DocCreatedAt     pgtype.Timestamptz `json:"doc_created_at"`
 	DocModifiedAt    pgtype.Timestamptz `json:"doc_modified_at"`
+	SourceSite       *string            `json:"source_site"`
 }
 
 type SongGenre struct {

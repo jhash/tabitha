@@ -134,6 +134,42 @@ func TestListSongsQueryHideUndigestedExcludesSongsWithoutAVersion(t *testing.T) 
 	_ = undigested
 }
 
+func TestListSongsQueryReportsSourceSite(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	ugSong, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{
+		Title: "UG Song", SourceUrl: "https://tabs.ultimate-guitar.com/tab/artist/song-chords-1",
+	})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+	blankSong, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Blank Source Song"})
+	if err != nil {
+		t.Fatalf("seeding: %v", err)
+	}
+
+	rows, err := ListSongsQuery(ctx, q.DB(), SongQueryParams{Sort: "title"})
+	if err != nil {
+		t.Fatalf("ListSongsQuery() error = %v", err)
+	}
+	var ugRow, blankRow SongRow
+	for _, r := range rows {
+		if r.ID == ugSong.ID {
+			ugRow = r
+		}
+		if r.ID == blankSong.ID {
+			blankRow = r
+		}
+	}
+	if ugRow.SourceSite != "ultimate-guitar" {
+		t.Errorf("ugRow.SourceSite = %q, want %q", ugRow.SourceSite, "ultimate-guitar")
+	}
+	if blankRow.SourceSite != "tabitha-spreadsheet" {
+		t.Errorf("blankRow.SourceSite = %q, want %q", blankRow.SourceSite, "tabitha-spreadsheet")
+	}
+}
+
 func TestListSongsQueryReportsHasVersion(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()

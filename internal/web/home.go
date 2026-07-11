@@ -29,6 +29,11 @@ type SongRow struct {
 	// songs never digested — see effectiveAddedAt/effectiveUpdatedAt.
 	DocCreatedAt  *time.Time
 	DocModifiedAt *time.Time
+	// SourceSite is derived (by the DB, from source_url's host) — which
+	// tab/chord site a song's transcription originated from, e.g.
+	// "ultimate-guitar", or "tabitha-spreadsheet" when there's no
+	// external link at all.
+	SourceSite string
 }
 
 // effectiveAddedAt/effectiveUpdatedAt prefer the Google Doc's own
@@ -213,6 +218,7 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 				sortHeader("Last Updated", "updated", params),
 				sortHeader("Added", "added", params),
 				sortHeader("Added By", "added_by", params),
+				Th(g.Text("Source")),
 			),
 		),
 		TBody(
@@ -225,6 +231,7 @@ func homeTable(songs []SongRow, params SongQueryParams) g.Node {
 					Td(g.Text(formatDate(effectiveUpdatedAt(s)))),
 					Td(g.Text(formatDate(effectiveAddedAt(s)))),
 					Td(g.Text(addedByLabel(s))),
+					Td(g.Text(s.SourceSite)),
 				)
 			}),
 		),
