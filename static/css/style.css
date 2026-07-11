@@ -122,9 +122,16 @@ main.container.container-wide {
   justify-content: center;
 }
 
-.new-song-bar {
+.songs-header-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.songs-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0.75rem 0;
 }
 

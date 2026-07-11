@@ -117,6 +117,12 @@ func TestHomeContentShowsNewSongButtonAboveAndBelowTableForSuperadmins(t *testin
 	if n := strings.Count(html, `href="/songs/new"`); n != 2 {
 		t.Errorf("expected the + Song link to appear twice (above and below the table), got %d in: %s", n, html)
 	}
+	if !strings.Contains(html, `class="songs-header-row"`) {
+		t.Errorf("expected the top + Song link inline with the header row, got: %s", html)
+	}
+	if !strings.Contains(html, `class="songs-footer-row"`) {
+		t.Errorf("expected the bottom + Song link inline with the bulk-status row, got: %s", html)
+	}
 }
 
 func TestHomeContentOmitsNewSongButtonForRegularViewers(t *testing.T) {

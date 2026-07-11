@@ -168,22 +168,26 @@ func withSort(p SongQueryParams, column string) string {
 
 func homeContent(songs []SongRow, params SongQueryParams, statuses []string, addedByUsers []db.ListDistinctAddedByUsersRow, viewerIsSuperadmin bool) g.Node {
 	return Div(
-		H1(g.Text("Songs")),
+		Div(Class("songs-header-row"),
+			H1(g.Text("Songs")),
+			g.If(viewerIsSuperadmin, newSongButton()),
+		),
 		searchAndFilterForm(params, statuses, addedByUsers),
-		g.If(viewerIsSuperadmin, newSongButtonBar()),
 		homeTable(songs, params, statuses, viewerIsSuperadmin),
-		g.If(viewerIsSuperadmin, newSongButtonBar()),
-		g.If(viewerIsSuperadmin, bulkStatusBar(statuses)),
+		g.If(viewerIsSuperadmin,
+			Div(Class("songs-footer-row"),
+				bulkStatusBar(statuses),
+				newSongButton(),
+			),
+		),
 	)
 }
 
-// newSongButtonBar is the "+ Song" link shown above and below the table for
-// superadmins — flexbox + justify-content just floats the single button to
-// the row's right edge without needing a dedicated float/clearfix.
-func newSongButtonBar() g.Node {
-	return Div(Class("new-song-bar"),
-		A(Class("new-song-button"), Href("/songs/new"), g.Text("+ Song")),
-	)
+// newSongButton is the "+ Song" link shown inline with the "Songs" header
+// above the table and inline with the bulk-status bar below it, for
+// superadmins only.
+func newSongButton() g.Node {
+	return A(Class("new-song-button"), Href("/songs/new"), g.Text("+ Song"))
 }
 
 // bulkStatusBar lets a superadmin set the status of every checked row at
