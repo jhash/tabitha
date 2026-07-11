@@ -591,6 +591,167 @@ func TestSongEditRouteServesPageForSuperadmin(t *testing.T) {
 	}
 }
 
+func TestSongEditRouteServesPageBySlug(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, _ := superadminSession(t, q)
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, "/songs/africa/edit", token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/africa/edit for superadmin status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Africa") {
+		t.Errorf("expected the edit page to mention the song title, got: %s", rec.Body.String())
+	}
+}
+
+func TestSongNewRouteRequires404ForAnonymousViewer(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/songs/new", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /songs/new anonymously status = %d, want 404", rec.Code)
+	}
+}
+
+func TestSongNewRouteServesFormForSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, "/songs/new", token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/new for superadmin status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `name="title"`) {
+		t.Errorf("expected a title field, got: %s", rec.Body.String())
+	}
+}
+
+func TestCreateSongRouteRequires404ForAnonymousViewer(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/songs", strings.NewReader(url.Values{"title": {"Brand New"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /songs anonymously status = %d, want 404", rec.Code)
+	}
+}
+
+func TestCreateSongRouteRejectsBlankTitle(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminFormRequest(r, http.MethodPost, "/songs", token, url.Values{"artist": {"Someone"}})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST /songs with blank title status = %d, want 400", rec.Code)
+	}
+}
+
+func TestCreateSongRouteCreatesSongAssignsSlugAndRedirectsToEditor(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	token, user := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminFormRequest(r, http.MethodPost, "/songs", token, url.Values{
+		"title":  {"Brand New Song"},
+		"artist": {"Some Artist"},
+	})
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("POST /songs status = %d, want %d", rec.Code, http.StatusFound)
+	}
+	loc := rec.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/songs/") || !strings.HasSuffix(loc, "/edit") {
+		t.Fatalf("Location = %q, want /songs/{slug}/edit", loc)
+	}
+
+	editRec := doAdminRequest(r, http.MethodGet, loc, token)
+	if editRec.Code != http.StatusOK {
+		t.Fatalf("GET %s status = %d, want 200", loc, editRec.Code)
+	}
+	if !strings.Contains(editRec.Body.String(), "Brand New Song") {
+		t.Errorf("expected the editor page to mention the new song, got: %s", editRec.Body.String())
+	}
+
+	song, err := q.GetSongByTitle(ctx, "Brand New Song")
+	if err != nil {
+		t.Fatalf("GetSongByTitle() error = %v", err)
+	}
+	if song.Slug == "" {
+		t.Error("expected a slug to be assigned")
+	}
+	if song.AddedByUserID == nil || *song.AddedByUserID != user.ID {
+		t.Errorf("AddedByUserID = %v, want %d", song.AddedByUserID, user.ID)
+	}
+}
+
+func TestAdminSongsRouteRequiresSuperadminSession(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/songs", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /admin/songs without a session status = %d, want 404", rec.Code)
+	}
+}
+
+func TestAdminSongsRouteServesPageForSuperadmin(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, "/admin/songs", token)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/songs for superadmin status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `href="/songs/new"`) {
+		t.Errorf("expected a + Song link, got: %s", rec.Body.String())
+	}
+}
+
+func TestAdminHomeLinksToManageSongs(t *testing.T) {
+	t.Cleanup(goth.ClearProviders)
+	q := setupTestQueries(t)
+	token, _ := superadminSession(t, q)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := doAdminRequest(r, http.MethodGet, "/admin", token)
+
+	if !strings.Contains(rec.Body.String(), `href="/admin/songs"`) {
+		t.Errorf("expected a Manage songs link, got: %s", rec.Body.String())
+	}
+}
+
 func TestSongShowRouteRedirectsIDToSlugWhenSlugSet(t *testing.T) {
 	q := setupTestQueries(t)
 	ctx := context.Background()

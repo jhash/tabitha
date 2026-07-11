@@ -46,10 +46,12 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.Get("/robots.txt", RobotsTxtHandler(cfg.AppURL))
 	r.Get("/sitemap.xml", SitemapHandler(q, cfg.AppURL))
 	r.Get("/", HomeHandler(q))
+	r.With(auth.RequireSuperadmin(q)).Get("/songs/new", SongNewHandler())
+	r.With(auth.RequireSuperadmin(q)).Post("/songs", CreateSongHandler(q))
 	r.Get("/songs/{idOrSlug}", SongShowHandler(q))
-	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/edit", SongEditHandler(q))
-	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/editor-content", GetSongEditorContentHandler(q))
-	r.With(auth.RequireSuperadmin(q)).Post("/songs/{id}/editor-content", PostSongEditorContentHandler(q))
+	r.With(auth.RequireSuperadmin(q)).Get("/songs/{idOrSlug}/edit", SongEditHandler(q))
+	r.With(auth.RequireSuperadmin(q)).Get("/songs/{idOrSlug}/editor-content", GetSongEditorContentHandler(q))
+	r.With(auth.RequireSuperadmin(q)).Post("/songs/{idOrSlug}/editor-content", PostSongEditorContentHandler(q))
 
 	// e2e-test-only: mints a superadmin session with no auth check, so
 	// Playwright etc. can drive superadmin-gated pages without a real
@@ -66,6 +68,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(auth.RequireSuperadmin(q))
 		r.Get("/", AdminHomeHandler)
+		r.Get("/songs", AdminSongsHandler)
 		r.Get("/users", AdminUsersHandler(q))
 		r.Post("/users/{id}/promote", AdminPromoteUserHandler(q))
 		r.Post("/songs/bulk-status", AdminBulkSetSongStatusHandler(q, cfg.AppURL, cfClient))

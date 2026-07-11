@@ -23,6 +23,19 @@ UPDATE songs SET google_doc_id = $2, updated_at = now() WHERE id = $1;
 -- name: SetSongCurrentVersion :exec
 UPDATE songs SET current_version_id = $2, updated_at = now() WHERE id = $1;
 
+-- name: CreateSong :one
+-- Used by the "+ Song" flow (/songs/new): a superadmin creating a song
+-- from scratch rather than via toc_sync's spreadsheet upsert. added_by
+-- reflects the actual creator instead of falling through to the
+-- Jeff-default trigger (see migration 0006).
+INSERT INTO songs (
+    title, artist, genre, film_show_album, decade, bob_tag, status,
+    source_url, notes, transpose_hint, added_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+RETURNING *;
+
 -- name: GetSongByID :one
 SELECT * FROM songs WHERE id = $1;
 

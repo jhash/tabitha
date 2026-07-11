@@ -9,9 +9,27 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	g "maragu.dev/gomponents"
+	. "maragu.dev/gomponents/html"
+
 	"github.com/jhash/tabitha/internal/cloudflare"
 	"github.com/jhash/tabitha/internal/db"
 )
+
+// AdminSongsHandler is the "Manage songs" landing page — just the "+ Song"
+// entry point into /songs/new for now, no index list (the home page's
+// table already serves that).
+func AdminSongsHandler(w http.ResponseWriter, r *http.Request) {
+	page := Page("Manage songs", "tabitha admin — songs", nil, true,
+		Div(
+			H1(g.Text("Manage songs")),
+			P(A(Class("new-song-button"), Href("/songs/new"), g.Text("+ Song"))),
+			P(A(Href("/admin"), g.Text("Back to admin"))),
+		),
+	)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = page.Render(w)
+}
 
 // purgeHomePage best-effort invalidates the cached home page after a
 // status change (its table shows status directly) — never fails the

@@ -25,6 +25,41 @@ func TestUpsertSongFromTOCCreatesNewSong(t *testing.T) {
 	}
 }
 
+func TestCreateSongInsertsARowWithTheGivenFields(t *testing.T) {
+	q := setupTestDB(t)
+	ctx := context.Background()
+
+	user, err := q.FindOrCreateUser(ctx, FindOrCreateUserParams{Email: "creator@example.com", Name: "Creator"})
+	if err != nil {
+		t.Fatalf("FindOrCreateUser() error = %v", err)
+	}
+
+	song, err := q.CreateSong(ctx, CreateSongParams{
+		Title:         "Brand New Song",
+		Artist:        "Some Artist",
+		Genre:         "Rock",
+		AddedByUserID: &user.ID,
+	})
+	if err != nil {
+		t.Fatalf("CreateSong() error = %v", err)
+	}
+	if song.Title != "Brand New Song" {
+		t.Errorf("Title = %q", song.Title)
+	}
+	if song.Artist != "Some Artist" {
+		t.Errorf("Artist = %q", song.Artist)
+	}
+	if song.Genre != "Rock" {
+		t.Errorf("Genre = %q", song.Genre)
+	}
+	if song.AddedByUserID == nil || *song.AddedByUserID != user.ID {
+		t.Errorf("AddedByUserID = %v, want %d", song.AddedByUserID, user.ID)
+	}
+	if song.Slug != "" {
+		t.Errorf("Slug = %q, want empty until assigned", song.Slug)
+	}
+}
+
 func TestUpsertSongFromTOCDedupsByNormalizedTitleArtist(t *testing.T) {
 	q := setupTestDB(t)
 	ctx := context.Background()

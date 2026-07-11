@@ -27,6 +27,16 @@ func songShowHref(song db.Song) string {
 	return fmt.Sprintf("/songs/%d", song.ID)
 }
 
+// resolveSongByIDOrSlug looks a song up by its numeric ID or its slug,
+// whichever the URL segment parses as — shared by every /songs/{idOrSlug}
+// route so a song can be reached either way.
+func resolveSongByIDOrSlug(r *http.Request, q *db.Queries, idOrSlug string) (db.Song, error) {
+	if id, err := strconv.ParseInt(idOrSlug, 10, 64); err == nil {
+		return q.GetSongByID(r.Context(), id)
+	}
+	return q.GetSongBySlug(r.Context(), idOrSlug)
+}
+
 // SongShowHandler renders a single song's page: its transcription if one has
 // been digested yet, otherwise a plain not-yet-digested placeholder (the
 // state every song is in until Task 23's real digestion pipeline runs).
@@ -34,27 +44,17 @@ func SongShowHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idOrSlug := chi.URLParam(r, "idOrSlug")
 
-		var song db.Song
-		var err error
-		if id, parseErr := strconv.ParseInt(idOrSlug, 10, 64); parseErr == nil {
-			song, err = q.GetSongByID(r.Context(), id)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
-			// Numeric IDs are a legacy/fallback path — once a song has a
-			// slug, that's the canonical URL and old links should
-			// redirect there rather than serve two URLs for one song.
-			if song.Slug != "" {
-				http.Redirect(w, r, "/songs/"+song.Slug, http.StatusMovedPermanently)
-				return
-			}
-		} else {
-			song, err = q.GetSongBySlug(r.Context(), idOrSlug)
-			if err != nil {
-				http.NotFound(w, r)
-				return
-			}
+		song, err := resolveSongByIDOrSlug(r, q, idOrSlug)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		// Numeric IDs are a legacy/fallback path — once a song has a
+		// slug, that's the canonical URL and old links should redirect
+		// there rather than serve two URLs for one song.
+		if _, parseErr := strconv.ParseInt(idOrSlug, 10, 64); parseErr == nil && song.Slug != "" {
+			http.Redirect(w, r, "/songs/"+song.Slug, http.StatusMovedPermanently)
+			return
 		}
 
 		blocks, key, hasVersion, err := currentVersionBlocks(r.Context(), q, song)

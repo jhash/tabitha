@@ -11,6 +11,76 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createSong = `-- name: CreateSong :one
+INSERT INTO songs (
+    title, artist, genre, film_show_album, decade, bob_tag, status,
+    source_url, notes, transpose_hint, added_by_user_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+RETURNING id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug
+`
+
+type CreateSongParams struct {
+	Title         string `json:"title"`
+	Artist        string `json:"artist"`
+	Genre         string `json:"genre"`
+	FilmShowAlbum string `json:"film_show_album"`
+	Decade        string `json:"decade"`
+	BobTag        string `json:"bob_tag"`
+	Status        string `json:"status"`
+	SourceUrl     string `json:"source_url"`
+	Notes         string `json:"notes"`
+	TransposeHint string `json:"transpose_hint"`
+	AddedByUserID *int64 `json:"added_by_user_id"`
+}
+
+// Used by the "+ Song" flow (/songs/new): a superadmin creating a song
+// from scratch rather than via toc_sync's spreadsheet upsert. added_by
+// reflects the actual creator instead of falling through to the
+// Jeff-default trigger (see migration 0006).
+func (q *Queries) CreateSong(ctx context.Context, arg CreateSongParams) (Song, error) {
+	row := q.db.QueryRow(ctx, createSong,
+		arg.Title,
+		arg.Artist,
+		arg.Genre,
+		arg.FilmShowAlbum,
+		arg.Decade,
+		arg.BobTag,
+		arg.Status,
+		arg.SourceUrl,
+		arg.Notes,
+		arg.TransposeHint,
+		arg.AddedByUserID,
+	)
+	var i Song
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Artist,
+		&i.Genre,
+		&i.FilmShowAlbum,
+		&i.Decade,
+		&i.BobTag,
+		&i.Status,
+		&i.SourceUrl,
+		&i.Notes,
+		&i.TransposeHint,
+		&i.GoogleDocID,
+		&i.CurrentVersionID,
+		&i.AddedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArtistID,
+		&i.PreferredKey,
+		&i.DocCreatedAt,
+		&i.DocModifiedAt,
+		&i.SourceSite,
+		&i.Slug,
+	)
+	return i, err
+}
+
 const getSongByID = `-- name: GetSongByID :one
 SELECT id, title, artist, genre, film_show_album, decade, bob_tag, status, source_url, notes, transpose_hint, google_doc_id, current_version_id, added_by_user_id, created_at, updated_at, artist_id, preferred_key, doc_created_at, doc_modified_at, source_site, slug FROM songs WHERE id = $1
 `

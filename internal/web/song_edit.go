@@ -19,13 +19,7 @@ import (
 // rather than anything rendered server-side here.
 func SongEditHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-		if err != nil {
-			http.NotFound(w, r)
-			return
-		}
-
-		song, err := q.GetSongByID(r.Context(), id)
+		song, err := resolveSongByIDOrSlug(r, q, chi.URLParam(r, "idOrSlug"))
 		if err != nil {
 			http.NotFound(w, r)
 			return

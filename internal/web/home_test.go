@@ -107,6 +107,30 @@ func TestHomeContentShowsBulkStatusBarForSuperadmins(t *testing.T) {
 	}
 }
 
+func TestHomeContentShowsNewSongButtonAboveAndBelowTableForSuperadmins(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	var buf bytes.Buffer
+	if err := homeContent(songs, SongQueryParams{Sort: "title"}, []string{"Done"}, nil, true).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if n := strings.Count(html, `href="/songs/new"`); n != 2 {
+		t.Errorf("expected the + Song link to appear twice (above and below the table), got %d in: %s", n, html)
+	}
+}
+
+func TestHomeContentOmitsNewSongButtonForRegularViewers(t *testing.T) {
+	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
+	var buf bytes.Buffer
+	if err := homeContent(songs, SongQueryParams{Sort: "title"}, []string{"Done"}, nil, false).Render(&buf); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	html := buf.String()
+	if strings.Contains(html, `/songs/new`) {
+		t.Errorf("expected no + Song link for regular viewers, got: %s", html)
+	}
+}
+
 func TestHomeContentOmitsBulkStatusBarForRegularViewers(t *testing.T) {
 	songs := []SongRow{{ID: 2, Title: "Africa", Status: "Done"}}
 	var buf bytes.Buffer

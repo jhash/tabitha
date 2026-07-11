@@ -170,8 +170,19 @@ func homeContent(songs []SongRow, params SongQueryParams, statuses []string, add
 	return Div(
 		H1(g.Text("Songs")),
 		searchAndFilterForm(params, statuses, addedByUsers),
+		g.If(viewerIsSuperadmin, newSongButtonBar()),
 		homeTable(songs, params, statuses, viewerIsSuperadmin),
+		g.If(viewerIsSuperadmin, newSongButtonBar()),
 		g.If(viewerIsSuperadmin, bulkStatusBar(statuses)),
+	)
+}
+
+// newSongButtonBar is the "+ Song" link shown above and below the table for
+// superadmins — flexbox + justify-content just floats the single button to
+// the row's right edge without needing a dedicated float/clearfix.
+func newSongButtonBar() g.Node {
+	return Div(Class("new-song-bar"),
+		A(Class("new-song-button"), Href("/songs/new"), g.Text("+ Song")),
 	)
 }
 
