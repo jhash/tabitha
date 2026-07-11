@@ -96,7 +96,7 @@ func songShowContent(song db.Song, blocks []transcription.Block, key string, has
 		g.If(song.Artist != "", P(Class("byline"), g.Text("As performed by "+song.Artist))),
 		g.If(key != "", P(Class("key"), g.Text("Key: "), B(g.Text(strings.ToUpper(key))))),
 		g.If(viewerIsSuperadmin,
-			P(Class("admin-affordance"), A(Href(fmt.Sprintf("/songs/%d/edit", song.ID)), g.Text("Edit"))),
+			P(Class("admin-affordance"), A(Href(fmt.Sprintf("/songs/%d/edit", song.ID)), g.Attr("hx-boost", "false"), g.Text("Edit"))),
 		),
 		g.If(!hasVersion,
 			P(Class("no-content"), g.Text("This song hasn't been digested from Jeff's Google Doc yet.")),

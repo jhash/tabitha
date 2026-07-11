@@ -206,3 +206,16 @@ func TestSongShowShowsEditLinkToSuperadmins(t *testing.T) {
 		t.Errorf("expected an edit link pointing at /songs/42/edit for a superadmin viewer, got: %s", html)
 	}
 }
+
+// The edit page mounts a fixed-URL ES module (editor.js). Under htmx's
+// hx-boost, navigating between two /edit pages swaps the DOM without a real
+// browser navigation, so the module (already loaded once) never
+// re-executes and the editor fails to mount for the second song. The Edit
+// link must opt out of boosting so every visit is a real page load.
+func TestSongShowEditLinkOptsOutOfHtmxBoost(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	html := renderSongShow(t, song, nil, false, true)
+	if !strings.Contains(html, `href="/songs/42/edit" hx-boost="false"`) {
+		t.Errorf("expected edit link to have hx-boost=\"false\", got: %s", html)
+	}
+}

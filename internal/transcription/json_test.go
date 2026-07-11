@@ -86,6 +86,43 @@ func TestMarshalDocumentRoundTripsThroughJSON(t *testing.T) {
 	}
 }
 
+func TestMarshalDocumentRoundTripsTokenMarks(t *testing.T) {
+	original := []Block{
+		{
+			Kind: ChordLyricPair,
+			Tokens: []Token{
+				{Chord: "E"},
+				{Text: "I can't get ", Bold: true},
+				{Text: "no", Italic: true, Underline: true},
+				{Text: " satisfaction"},
+			},
+		},
+	}
+
+	data, err := MarshalDocument(original)
+	if err != nil {
+		t.Fatalf("MarshalDocument() error = %v", err)
+	}
+	got, err := UnmarshalDocument(data)
+	if err != nil {
+		t.Fatalf("UnmarshalDocument() error = %v", err)
+	}
+
+	tokens := got[0].Tokens
+	if len(tokens) != 4 {
+		t.Fatalf("got %d tokens, want 4: %+v", len(tokens), tokens)
+	}
+	if !tokens[1].Bold || tokens[1].Italic || tokens[1].Underline {
+		t.Errorf("token[1] = %+v, want only Bold set", tokens[1])
+	}
+	if !tokens[2].Italic || !tokens[2].Underline || tokens[2].Bold {
+		t.Errorf("token[2] = %+v, want Italic and Underline set, not Bold", tokens[2])
+	}
+	if tokens[3].Bold || tokens[3].Italic || tokens[3].Underline {
+		t.Errorf("token[3] = %+v, want no marks set", tokens[3])
+	}
+}
+
 func TestMarshalDocumentMatchesSchemaDefaultShape(t *testing.T) {
 	// The songs migration defaults transcription_versions.content to
 	// '{"blocks": []}' — confirm our Go-side shape actually matches that,

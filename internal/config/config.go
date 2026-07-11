@@ -4,6 +4,8 @@ package config
 import (
 	"errors"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -17,9 +19,18 @@ type Config struct {
 	SessionSecret      string
 	CloudflareAPIToken string
 	CloudflareZoneID   string
+
+	// DevLoginEnabled mounts /dev-login, which mints a superadmin session
+	// with no auth check — only ever for local/CI e2e tests
+	// (DEV_LOGIN_ENABLED=true), never in production.
+	DevLoginEnabled bool
 }
 
 func Load() (Config, error) {
+	// Best-effort: fine if .env doesn't exist (prod sets real env vars).
+	// godotenv never overrides vars already set in the environment.
+	_ = godotenv.Load()
+
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
 		return Config{}, errors.New("config: DATABASE_URL is required")
@@ -46,5 +57,6 @@ func Load() (Config, error) {
 		SessionSecret:      os.Getenv("SESSION_SECRET"),
 		CloudflareAPIToken: os.Getenv("CLOUDFLARE_API_TOKEN"),
 		CloudflareZoneID:   os.Getenv("CLOUDFLARE_ZONE_ID"),
+		DevLoginEnabled:    os.Getenv("DEV_LOGIN_ENABLED") == "true",
 	}, nil
 }

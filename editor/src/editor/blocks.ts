@@ -11,6 +11,9 @@ export interface Token {
   chord?: string;
   text?: string;
   synthetic?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
 }
 
 export interface Block {

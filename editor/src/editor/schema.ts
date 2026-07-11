@@ -1,40 +1,61 @@
 import { Schema } from "prosemirror-model";
 
-// Mirrors internal/transcription/blocks.go's Block/Token model: each Block
-// becomes a top-level node, and a chord_line's Tokens become a flat run of
-// atomic chordWord leaves (chord stacked above its one lyric word), matching
-// the flex-based chord-word rendering internal/web/transcription_render.go
-// added this session (no column math — chords just sit above their word).
+// Mirrors internal/transcription/blocks.go's Block/Token model directly: a
+// "line" node's content is the literal interleaved text/chord token stream
+// (chordMarker is an independent inline atom, not fused to the word it sits
+// above) so lyrics are natively editable and chords can be moved, added, or
+// removed without touching the surrounding text. The chord-over-word visual
+// is produced by CSS positioning the marker's label above itself — see
+// internal/web/transcription_render.go, which regroups this same token
+// stream into wrappable word units for the public page independently of how
+// it was authored here.
 export const schema = new Schema({
+  marks: {
+    // Bold/italic/underline apply to lyric text only (see convert.ts) —
+    // the underlying transcription.Token model only carries these marks
+    // for ChordLyricPair/ChordOnlyLine tokens, not section headers (which
+    // are already permanently bold via CSS) or title/artist/note text
+    // lines, so the floating format toolbar (FormatToolbar.ts) only shows
+    // up for selections inside a "line" node.
+    strong: {
+      toDOM: () => ["strong", 0],
+      parseDOM: [{ tag: "strong" }, { tag: "b" }],
+    },
+    em: {
+      toDOM: () => ["em", 0],
+      parseDOM: [{ tag: "em" }, { tag: "i" }],
+    },
+    underline: {
+      toDOM: () => ["u", 0],
+      parseDOM: [{ tag: "u" }],
+    },
+  },
   nodes: {
     doc: { content: "block+" },
 
     section_header: {
       group: "block",
       content: "text*",
+      // No marks: internal/transcription's SectionHeader Block only has a
+      // plain Text string, nowhere to persist bold/italic/underline even
+      // if the schema allowed applying them here.
+      marks: "",
       toDOM: () => ["div", { class: "section-header" }, 0],
       parseDOM: [{ tag: "div.section-header" }],
     },
 
-    text_line: {
+    line: {
       group: "block",
-      content: "text*",
-      toDOM: () => ["div", { class: "text-line" }, 0],
-      parseDOM: [{ tag: "div.text-line" }],
-    },
-
-    chord_line: {
-      group: "block",
-      content: "chordWord*",
+      content: "inline*",
       attrs: { annotation: { default: "" } },
       toDOM: (node) => [
         "div",
-        { class: "chord-line", "data-annotation": node.attrs.annotation as string },
+        { class: "line", "data-annotation": node.attrs.annotation as string },
         0,
       ],
       parseDOM: [
         {
-          tag: "div.chord-line",
+          tag: "div.line",
           getAttrs: (dom) => ({
             annotation: (dom as HTMLElement).getAttribute("data-annotation") || "",
           }),
@@ -42,27 +63,23 @@ export const schema = new Schema({
       ],
     },
 
-    chordWord: {
+    chordMarker: {
       group: "inline",
       inline: true,
       atom: true,
-      attrs: { chord: { default: "" }, word: { default: "" } },
+      draggable: true,
+      attrs: { chord: { default: "" } },
       toDOM: (node) => [
         "span",
-        { class: "chord-word" },
-        ["span", { class: "chord" }, node.attrs.chord as string],
-        ["span", { class: "lyric" }, (node.attrs.word as string) + " "],
+        { class: "chord-marker" },
+        ["span", { class: "chord-marker-label" }, node.attrs.chord as string],
       ],
       parseDOM: [
         {
-          tag: "span.chord-word",
-          getAttrs: (dom) => {
-            const el = dom as HTMLElement;
-            return {
-              chord: el.querySelector(".chord")?.textContent?.trim() || "",
-              word: el.querySelector(".lyric")?.textContent?.trim() || "",
-            };
-          },
+          tag: "span.chord-marker",
+          getAttrs: (dom) => ({
+            chord: (dom as HTMLElement).querySelector(".chord-marker-label")?.textContent || "",
+          }),
         },
       ],
     },

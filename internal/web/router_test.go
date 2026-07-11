@@ -444,6 +444,45 @@ func TestAdminToolsRouteRequiresSuperadminSession(t *testing.T) {
 	}
 }
 
+func TestDevLoginRouteNotMountedByDefault(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/dev-login", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /dev-login status = %d, want 404 when DevLoginEnabled is false", rec.Code)
+	}
+}
+
+func TestDevLoginRouteMintsSuperadminSessionWhenEnabled(t *testing.T) {
+	q := setupTestQueries(t)
+
+	r := NewRouter(config.Config{DevLoginEnabled: true}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/dev-login", nil))
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET /dev-login status = %d, want 302", rec.Code)
+	}
+
+	var token string
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookieName {
+			token = c.Value
+		}
+	}
+	if token == "" {
+		t.Fatal("expected /dev-login to set a session cookie")
+	}
+
+	adminRec := doAdminRequest(r, http.MethodGet, "/admin", token)
+	if adminRec.Code != http.StatusOK {
+		t.Errorf("GET /admin using the dev-login session status = %d, want 200", adminRec.Code)
+	}
+}
+
 func TestHealthzRouteIsWiredAndPublic(t *testing.T) {
 	q := setupTestQueries(t)
 

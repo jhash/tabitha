@@ -39,8 +39,10 @@ createdb tabitha_test_migrate   # isolated db for the migrate up/down round-trip
 cp .env.example .env    # then fill in values — see below
 ```
 
-Load `.env` into your shell (`set -a; source .env; set +a`) or export the
-vars another way, then:
+`.env` is loaded automatically (via [godotenv](https://github.com/joho/godotenv))
+whenever `tabitha` starts, from whatever directory you run it in — no need to
+`source` it yourself. Real environment variables always take precedence over
+`.env` if both are set.
 
 ```sh
 go run . migrate up   # applies both tabitha's schema and River's own tables
@@ -105,6 +107,29 @@ One test (`TestMigrateUpCreatesAllTablesThenDownDropsThem`) exercises
 (`TEST_MIGRATE_DATABASE_URL`, defaults to
 `postgres:///tabitha_test_migrate?sslmode=disable`) so it can never race
 other tests relying on `tabitha_test`'s schema staying intact.
+
+### End-to-end tests (`e2e/`)
+
+Real-browser Playwright tests for the ProseMirror song editor — drives
+an actual running server + Postgres + Chromium, so it catches things the
+Go/vitest suites can't (rendered layout/overlap, click/drag interactions,
+the full load → edit → save → reload round-trip):
+
+```sh
+createdb tabitha_e2e_test   # once
+cd e2e
+npm install
+npx playwright install chromium   # once
+npm test
+```
+
+Playwright's `webServer` config runs `e2e/setup-server.sh`, which builds
+the editor bundle + Go binary, runs migrations against
+`tabitha_e2e_test`, seeds one predictable song via `cmd/e2eseed`, and
+starts the server on port 8091 with `DEV_LOGIN_ENABLED=true` — a
+`/dev-login` route (never mounted otherwise; see `internal/config`) that
+mints a superadmin session with no real OAuth login, purely for driving
+superadmin-gated pages in tests.
 
 ## CLI reference
 

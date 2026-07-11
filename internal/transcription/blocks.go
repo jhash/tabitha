@@ -32,6 +32,13 @@ type Token struct {
 	// length still counts toward chord-column math, but it's excluded when
 	// reconstructing the lyric line itself.
 	Synthetic bool `json:"synthetic,omitempty"`
+
+	// Bold/Italic/Underline are set only via the editor (never derived from
+	// parsing raw text — Render/the parser round-trip plain ASCII and stay
+	// untouched by these) and only apply to Text tokens.
+	Bold      bool `json:"bold,omitempty"`
+	Italic    bool `json:"italic,omitempty"`
+	Underline bool `json:"underline,omitempty"`
 }
 
 // Block is one unit of a parsed transcription, in document order.
@@ -39,10 +46,16 @@ type Block struct {
 	Kind BlockKind `json:"kind"`
 
 	// Text holds the verbatim line content for SectionHeader and TextLine.
+	// For TextLine, this stays populated as a plain-string convenience for
+	// existing consumers (byline dedup, "Key:" detection) even when Tokens
+	// is also set below — it's always the same content, just without marks.
 	Text string `json:"text,omitempty"`
 
 	// Tokens holds the interleaved chord/text stream for ChordLyricPair and
-	// ChordOnlyLine.
+	// ChordOnlyLine. For TextLine it optionally carries the same content as
+	// Text, but as Bold/Italic/Underline-aware tokens (chordless) — set
+	// only by the editor, when the line has marks worth preserving; absent
+	// for text lines with no formatting or that predate this feature.
 	Tokens []Token `json:"tokens,omitempty"`
 
 	// Annotation holds any trailing content on a chord line that isn't

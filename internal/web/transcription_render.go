@@ -18,6 +18,15 @@ import (
 type chordWord struct {
 	Chord string
 	Word  string
+
+	// Bold/Italic/Underline come from whichever Token's Text started this
+	// word (see splitIntoChordWords) — if a word is stitched together from
+	// multiple Tokens with different marks (a rare edge case: a mid-word
+	// chord that's also a mark boundary), only the first token's marks are
+	// kept, rather than tracking per-character formatting.
+	Bold      bool
+	Italic    bool
+	Underline bool
 }
 
 // splitIntoChordWords walks a ChordLyricPair/ChordOnlyLine's token stream
@@ -27,14 +36,37 @@ type chordWord struct {
 // with no lyric between them each become their own chordless-word entry,
 // and synthetic alignment padding (meaningless once we're not
 // reconstructing fixed columns) is dropped entirely.
+//
+// Text is processed rune-by-rune across token boundaries (rather than
+// per-token via strings.Fields) so a chord landing mid-word — which
+// stores the split location as two adjacent Text tokens with no
+// whitespace between them, e.g. "yo" / "u" for "you" — doesn't fragment
+// that word into two separately-wrapping chord-word units. Only actual
+// whitespace in the underlying text ends a word.
 func splitIntoChordWords(tokens []transcription.Token) []chordWord {
 	var words []chordWord
+	var buf strings.Builder
 	pendingChord := ""
 	havePending := false
+	var bold, italic, underline bool
+
+	flush := func() {
+		if buf.Len() > 0 || havePending {
+			words = append(words, chordWord{
+				Chord: pendingChord, Word: buf.String(),
+				Bold: bold, Italic: italic, Underline: underline,
+			})
+		}
+		buf.Reset()
+		pendingChord = ""
+		havePending = false
+		bold, italic, underline = false, false, false
+	}
+
 	for _, t := range tokens {
 		if t.Chord != "" {
 			if havePending {
-				words = append(words, chordWord{Chord: pendingChord})
+				flush()
 			}
 			pendingChord = t.Chord
 			havePending = true
@@ -43,19 +75,18 @@ func splitIntoChordWords(tokens []transcription.Token) []chordWord {
 		if t.Synthetic {
 			continue
 		}
-		for _, w := range strings.Fields(t.Text) {
-			if havePending {
-				words = append(words, chordWord{Chord: pendingChord, Word: w})
-				pendingChord = ""
-				havePending = false
+		for _, r := range t.Text {
+			if r == ' ' || r == '\t' || r == '\n' {
+				flush()
 			} else {
-				words = append(words, chordWord{Word: w})
+				if buf.Len() == 0 {
+					bold, italic, underline = t.Bold, t.Italic, t.Underline
+				}
+				buf.WriteRune(r)
 			}
 		}
 	}
-	if havePending {
-		words = append(words, chordWord{Chord: pendingChord})
-	}
+	flush()
 	return words
 }
 
@@ -73,7 +104,7 @@ func renderTranscriptionHTML(blocks []transcription.Block) g.Node {
 		case transcription.SectionHeader:
 			nodes[i] = Div(Class("section-header"), g.Text(b.Text))
 		case transcription.TextLine:
-			nodes[i] = Div(Class("text-line"), g.Text(b.Text))
+			nodes[i] = Div(Class("text-line"), textLineContent(b))
 		case transcription.ChordOnlyLine, transcription.ChordLyricPair:
 			nodes[i] = chordLineNode(b)
 		}
@@ -81,17 +112,58 @@ func renderTranscriptionHTML(blocks []transcription.Block) g.Node {
 	return Div(Class("transcription"), g.Group(nodes))
 }
 
+// textLineContent renders a TextLine's Bold/Italic/Underline marks when the
+// editor has set Tokens (see blocks.go) — falling back to the plain Text
+// string for lines with no formatting, or stored before this feature.
+func textLineContent(b transcription.Block) g.Node {
+	if len(b.Tokens) == 0 {
+		return g.Text(b.Text)
+	}
+	nodes := make([]g.Node, 0, len(b.Tokens))
+	for _, t := range b.Tokens {
+		var node g.Node = g.Text(t.Text)
+		if t.Underline {
+			node = U(node)
+		}
+		if t.Italic {
+			node = Em(node)
+		}
+		if t.Bold {
+			node = Strong(node)
+		}
+		nodes = append(nodes, node)
+	}
+	return g.Group(nodes)
+}
+
 func chordLineNode(b transcription.Block) g.Node {
 	words := splitIntoChordWords(b.Tokens)
 	children := make([]g.Node, 0, len(words)+1)
 	for _, w := range words {
 		children = append(children, Span(Class("chord-word"),
-			Span(Class("chord"), g.Text(strings.ToUpper(w.Chord))),
-			Span(Class("lyric"), g.Text(w.Word)),
+			Span(Class("chord"), g.Text(w.Chord)),
+			Span(Class("lyric"), lyricWordNode(w)),
 		))
 	}
 	if b.Annotation != "" {
 		children = append(children, Span(Class("annotation"), g.Text(b.Annotation)))
 	}
 	return Div(Class("chord-line"), g.Group(children))
+}
+
+// lyricWordNode wraps a chordWord's text in <strong>/<em>/<u> per its
+// marks (see splitIntoChordWords) — nested in that order when more than
+// one applies.
+func lyricWordNode(w chordWord) g.Node {
+	var node g.Node = g.Text(w.Word)
+	if w.Underline {
+		node = U(node)
+	}
+	if w.Italic {
+		node = Em(node)
+	}
+	if w.Bold {
+		node = Strong(node)
+	}
+	return node
 }

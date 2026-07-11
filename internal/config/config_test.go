@@ -1,6 +1,67 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoadDefaultsDevLoginEnabledToFalse(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("DEV_LOGIN_ENABLED", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if cfg.DevLoginEnabled {
+		t.Error("DevLoginEnabled = true, want false by default")
+	}
+}
+
+func TestLoadEnablesDevLoginWhenSetToTrue(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://x")
+	t.Setenv("DEV_LOGIN_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if !cfg.DevLoginEnabled {
+		t.Error("DevLoginEnabled = false, want true when DEV_LOGIN_ENABLED=true")
+	}
+}
+
+func TestLoadReadsDotEnvFileFromCurrentDirectory(t *testing.T) {
+	os.Unsetenv("DATABASE_URL")
+	os.Unsetenv("APP_URL")
+	t.Cleanup(func() {
+		os.Unsetenv("DATABASE_URL")
+		os.Unsetenv("APP_URL")
+	})
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("DATABASE_URL=postgres://from-dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(origWd)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if cfg.DatabaseURL != "postgres://from-dotenv" {
+		t.Errorf("DatabaseURL = %q, want postgres://from-dotenv", cfg.DatabaseURL)
+	}
+}
 
 func TestLoadDefaultsAppURLWhenUnset(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")

@@ -9,3 +9,7 @@
 /static/css/editor.css
 *.test
 .claude/scheduled_tasks.lock
+/e2e/.song-id
+/e2e/node_modules/
+/e2e/test-results/
+/tmp/tabitha-e2e

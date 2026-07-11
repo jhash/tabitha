@@ -51,6 +51,13 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/{id}/editor-content", GetSongEditorContentHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Post("/songs/{id}/editor-content", PostSongEditorContentHandler(q))
 
+	// e2e-test-only: mints a superadmin session with no auth check, so
+	// Playwright etc. can drive superadmin-gated pages without a real
+	// Google OAuth login. Never mounted unless DEV_LOGIN_ENABLED=true.
+	if cfg.DevLoginEnabled {
+		r.Get("/dev-login", DevLoginHandler(q))
+	}
+
 	if auth.GoogleConfigured(cfg) {
 		configureGoogleAuth(cfg)
 		mountAuthRoutes(r, cfg, q)

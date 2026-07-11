@@ -31,7 +31,7 @@
 .song-editor-surface {
   border: 1px solid var(--color-border, #ccc);
   border-radius: 4px;
-  padding: 1em;
+  padding: 1em 1em 1em 1.5em;
   min-height: 20em;
 }
 
@@ -39,31 +39,255 @@
   outline: none;
 }
 
-.song-editor-surface .section-header,
-.song-editor-surface .text-line {
+.song-editor-surface .section-header {
+  font-weight: 700;
   min-height: 1.3em;
+  margin: 1.4em 0 0.2em;
 }
 
-.song-editor-surface .chord-line {
+/* line: a lyric/chord row. Content is real editable text with chordMarker
+   atoms mixed in — the annotation input lives outside ProseMirror's
+   contentDOM (see nodeViews.ts) so it never fights the editor for
+   selection/typing. */
+.song-editor-surface .line {
   display: flex;
-  flex-wrap: wrap;
-  column-gap: 0.5em;
-  row-gap: 0.2em;
-  margin: 0.1em 0;
-  align-items: flex-end;
+  align-items: baseline;
+  gap: 0.75em;
+  min-height: 1.4em;
+  margin: 0.3em 0;
 }
 
-.song-editor-surface .chord-word {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.3;
+/* Lines with at least one chordMarker (see nodeViews.ts's has-chords
+   toggle) get margin-top tuned so the gap between two separate chorded
+   .line blocks reads the same as the gap between two wrapped rows inside
+   one chorded line (both driven by .line-content's line-height below) —
+   verified with getBoundingClientRect() measurements across the seeded
+   e2e song rather than by eye. Adjacent block margins collapse to their
+   max, so it's specifically margin-top (not the previous element's
+   margin-bottom) that has to supply this. Chordless lines (title/artist/
+   key/intro text etc.) stay at plain lyric-line height instead. */
+.song-editor-surface .line.has-chords {
+  margin: 0;
 }
 
-.song-editor-surface .chord-word .chord {
+.song-editor-surface .line-content {
+  flex: 1;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+/* Extra line-height on wrapped rows within a chord line is what reserves
+   room for a chord landing right at the start of a wrapped row — see
+   chord-marker below. Biased toward space above a wrapped row (matching
+   chord-marker-label's own rise) rather than below, since the label
+   itself already sits close to its word. */
+.song-editor-surface .line.has-chords .line-content {
+  line-height: 3.2;
+}
+
+.song-editor-surface .line-annotation {
+  flex-shrink: 0;
+  width: 11em;
+  font: inherit;
+  font-size: 0.8em;
+  color: var(--color-muted, #666);
+  border: 1px dashed transparent;
+  border-radius: 3px;
+  background: transparent;
+  padding: 0.1em 0.3em;
+}
+
+.song-editor-surface .line-annotation:hover,
+.song-editor-surface .line-annotation:focus {
+  border-color: var(--color-border, #ccc);
+  background: var(--color-bg, #fff);
+}
+
+/* chordMarker: an independent inline atom whose only visible content is its
+   floating chord label — it takes up no horizontal space on the lyric line
+   so lyrics read straight across with nothing inserted into the text.
+   display:inline (NOT inline-block) is deliberate: inline-block establishes
+   its own formatting context, which isolates its content (including the
+   ::after word-joiner below) from the surrounding line-breaking algorithm —
+   that's what let the browser detach a marker from the word it belongs to
+   at a wrap point. Being plain inline keeps it (and the word-joiner) part
+   of the same line-breaking pass as the lyric text around it. Headroom
+   above each row comes from .line-content's own line-height rather than a
+   per-marker box, so every wrapped row reserves the same space uniformly. */
+.song-editor-surface .chord-marker {
+  position: relative;
+  cursor: pointer;
+}
+
+/* Glues the marker to whatever text comes right after it, so line-wrapping
+   never orphans it at the end of the previous visual row — without this a
+   chord could render detached from the word it's meant to sit above. */
+.song-editor-surface .chord-marker::after {
+  content: "\2060";
+}
+
+.song-editor-surface .chord-marker-label {
+  position: absolute;
+  bottom: 1.1em;
+  left: 0;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-weight: 700;
   font-size: 0.85em;
+  /* Without this, the label inherits .line-content's own line-height
+     (1.4, or 3.2 on a chorded line) instead of sizing to its own text,
+     giving it a bounding box several times taller than its visible glyphs
+     — which threw off every overlap/gap measurement against it. */
+  line-height: normal;
   color: var(--color-muted, #666);
-  min-height: 1.1em;
+  white-space: nowrap;
+}
+
+.song-editor-surface .chord-marker.chord-marker-empty .chord-marker-label {
+  color: var(--color-border, #ccc);
+}
+
+.song-editor-surface .chord-marker:hover .chord-marker-label,
+.song-editor-surface .chord-marker.chord-marker-selected .chord-marker-label {
+  color: #4a90d9;
+}
+
+/* ChordPicker / ContextMenu / ChordActionBar / FormatToolbar popups —
+   appended to document.body, positioned fixed near their anchor and kept
+   inside the viewport (see popupPosition.ts). */
+.chord-picker,
+.chord-context-menu,
+.chord-action-bar,
+.format-toolbar {
+  z-index: 1000;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* Floating toolbar shown above a selected chordMarker — see
+   nodeViews.ts's selectNode/ChordActionBar.ts. */
+.chord-action-bar {
+  display: flex;
+  align-items: stretch;
+  padding: 0.2em;
+  gap: 0.2em;
+}
+
+.chord-action-bar button {
+  font: inherit;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0.3em 0.6em;
+  cursor: pointer;
+  color: var(--color-text, #222);
+}
+
+.chord-action-bar button:hover {
+  background: var(--color-border, #eee);
+}
+
+.chord-action-bar .chord-action-chord {
+  font-weight: 700;
+}
+
+.chord-action-bar .chord-action-delete:hover {
+  background: #e05656;
+  color: #fff;
+}
+
+/* Floating toolbar shown above a non-empty text selection inside a lyric
+   line — see formatToolbarPlugin.ts/FormatToolbar.ts. */
+.format-toolbar {
+  display: flex;
+  align-items: stretch;
+  padding: 0.2em;
+  gap: 0.2em;
+}
+
+.format-toolbar-btn {
+  font: inherit;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 0.3em 0.7em;
+  cursor: pointer;
+  color: var(--color-text, #222);
+}
+
+.format-toolbar-btn:hover {
+  background: var(--color-border, #eee);
+}
+
+.format-toolbar-btn.format-toolbar-active {
+  background: #4a90d9;
+  color: #fff;
+}
+
+/* Editor-only rendering for marks applied to lyric text. */
+.song-editor-surface strong {
+  font-weight: 700;
+}
+
+.song-editor-surface em {
+  font-style: italic;
+}
+
+.song-editor-surface u {
+  text-decoration: underline;
+}
+
+.chord-picker {
+  padding: 0.4em;
+  width: 12em;
+}
+
+.chord-picker-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.3em 0.5em;
+  border: 1px solid var(--color-border, #ccc);
+  border-radius: 4px;
+  margin-bottom: 0.3em;
+}
+
+.chord-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 12em;
+  overflow-y: auto;
+}
+
+.chord-picker-item {
+  padding: 0.25em 0.5em;
+  cursor: pointer;
+  border-radius: 3px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.chord-picker-item.highlighted,
+.chord-picker-item:hover {
+  background: #4a90d9;
+  color: #fff;
+}
+
+.chord-context-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0.25em 0;
+  min-width: 10em;
+}
+
+.chord-context-menu-item {
+  padding: 0.4em 0.8em;
+  cursor: pointer;
+}
+
+.chord-context-menu-item:hover {
+  background: #4a90d9;
+  color: #fff;
 }
