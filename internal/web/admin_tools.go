@@ -33,7 +33,8 @@ func AdminToolsHandler(jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
 				return
 			}
 		}
-		page := Page("Tools", "tabitha admin — tools", nil, adminToolsContent(jobsList))
+		// isSuperadmin is always true here — this route is RequireSuperadmin-gated.
+		page := Page("Tools", "tabitha admin — tools", nil, true, adminToolsContent(jobsList))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}

@@ -10,7 +10,7 @@ import (
 func renderPage(t *testing.T) string {
 	t.Helper()
 	var buf bytes.Buffer
-	node := Page("Test", "Test page", nil)
+	node := Page("Test", "Test page", nil, false)
 	if err := node.Render(&buf); err != nil {
 		t.Fatalf("failed to render page: %v", err)
 	}
@@ -66,9 +66,27 @@ func TestPageDoesNotDuplicateCharsetOrViewportMeta(t *testing.T) {
 	}
 }
 
+func TestPageOmitsAdminLinkForNonSuperadmin(t *testing.T) {
+	html := renderPage(t)
+	if strings.Contains(html, "site-admin-link") {
+		t.Error("expected no admin link in header for a non-superadmin viewer")
+	}
+}
+
+func TestPageShowsAdminLinkForSuperadmin(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Page("Test", "Test page", nil, true).Render(&buf); err != nil {
+		t.Fatalf("failed to render page: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `href="/admin"`) {
+		t.Error("expected header to link to /admin for a superadmin viewer")
+	}
+}
+
 func TestPageSetsTitleAndDescription(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Page("My Song", "A great song", nil).Render(&buf); err != nil {
+	if err := Page("My Song", "A great song", nil, false).Render(&buf); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
 	html := buf.String()

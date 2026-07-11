@@ -3,8 +3,6 @@
 package web
 
 import (
-	"strings"
-
 	g "maragu.dev/gomponents"
 	c "maragu.dev/gomponents/components"
 	. "maragu.dev/gomponents/html"
@@ -15,21 +13,32 @@ const siteName = "tabitha"
 // Page renders a full HTML5 document with tabitha's shared chrome: a
 // self-hosted, preloaded Lora font (no CDN, no FOUT), the Roux-derived
 // reset plus our stylesheet, self-hosted htmx with hx-boost enabled
-// site-wide, and a plain header. sidebar is optional (nil renders none —
-// most public pages don't have one).
-func Page(title, description string, sidebar g.Node, body ...g.Node) g.Node {
-	return page(title, description, sidebar, "container", body...)
+// site-wide, and a plain header (with an /admin link for authenticated
+// superadmins). sidebar is optional (nil renders none — most public
+// pages don't have one).
+func Page(title, description string, sidebar g.Node, isSuperadmin bool, body ...g.Node) g.Node {
+	return page(title, description, sidebar, false, isSuperadmin, body...)
 }
 
 // PageWide is Page, but without the readable-prose max-width cap on the
 // main content column — for pages built around a wide table rather than
 // running text (the home page's songs table), so it can use as much of
 // the window as .layout allows instead of wrapping/squeezing at ~42rem.
-func PageWide(title, description string, sidebar g.Node, body ...g.Node) g.Node {
-	return page(title, description, sidebar, "container container-wide", body...)
+// The header's own container widens to match, so "tabitha" stays aligned
+// with the content's left edge instead of sitting narrower than a wide
+// table.
+func PageWide(title, description string, sidebar g.Node, isSuperadmin bool, body ...g.Node) g.Node {
+	return page(title, description, sidebar, true, isSuperadmin, body...)
 }
 
-func page(title, description string, sidebar g.Node, mainClass string, body ...g.Node) g.Node {
+func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, body ...g.Node) g.Node {
+	mainClass := "container"
+	headerClass := "site-header-inner"
+	if wide {
+		mainClass += " container-wide"
+		headerClass += " container-wide"
+	}
+
 	return c.HTML5(c.HTML5Props{
 		Title:       title + " · " + siteName,
 		Description: description,
@@ -50,22 +59,23 @@ func page(title, description string, sidebar g.Node, mainClass string, body ...g
 		},
 		Body: g.Group{
 			Header(Class("site-header"),
-				Div(Class("site-header-inner"),
+				Div(Class(headerClass),
 					A(Class("site-title"), Href("/"), g.Text(siteName)),
+					g.If(isSuperadmin, A(Class("site-admin-link"), Href("/admin"), g.Text("Admin"))),
 				),
 			),
-			layoutRow(sidebar, mainClass, body...),
+			layoutRow(sidebar, wide, mainClass, body...),
 			Script(Src("/static/js/htmx.min.js")),
 		},
 	})
 }
 
-func layoutRow(sidebar g.Node, mainClass string, body ...g.Node) g.Node {
+func layoutRow(sidebar g.Node, wide bool, mainClass string, body ...g.Node) g.Node {
 	classes := "layout"
 	if sidebar == nil {
 		classes += " no-sidebar"
 	}
-	if strings.Contains(mainClass, "container-wide") {
+	if wide {
 		classes += " layout-wide"
 	}
 

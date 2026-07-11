@@ -22,7 +22,8 @@ func AdminUsersHandler(q *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		page := Page("Users", "tabitha admin — users", nil, adminUsersTable(users))
+		// isSuperadmin is always true here — this route is RequireSuperadmin-gated.
+		page := Page("Users", "tabitha admin — users", nil, true, adminUsersTable(users))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}

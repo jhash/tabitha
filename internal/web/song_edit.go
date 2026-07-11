@@ -38,7 +38,8 @@ func SongEditHandler(q *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		page := Page("Edit "+song.Title, "tabitha admin — edit", nil, songEditContent(song, blocks, hasVersion))
+		// isSuperadmin is always true here — this route is RequireSuperadmin-gated.
+		page := Page("Edit "+song.Title, "tabitha admin — edit", nil, true, songEditContent(song, blocks, hasVersion))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}

@@ -44,7 +44,7 @@ func SongShowHandler(q *db.Queries) http.HandlerFunc {
 		viewerIsSuperadmin := viewer.Role == db.UserRoleSuperadmin
 
 		description := fmt.Sprintf("%s, as performed by %s", song.Title, song.Artist)
-		page := Page(song.Title, description, nil, songShowContent(song, blocks, key, hasVersion, viewerIsSuperadmin))
+		page := Page(song.Title, description, nil, viewerIsSuperadmin, songShowContent(song, blocks, key, hasVersion, viewerIsSuperadmin))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}

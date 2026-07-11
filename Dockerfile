@@ -10,7 +10,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -o /tabitha .
 
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates \
+RUN apk add --no-cache ca-certificates bash \
     && addgroup -S tabitha && adduser -S tabitha -G tabitha
 WORKDIR /app
 

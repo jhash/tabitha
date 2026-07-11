@@ -61,12 +61,25 @@ a:hover {
   max-width: 64rem;
   margin: 0 auto;
   padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Widens alongside .layout-wide/.container-wide on the home page so the
+   header stays aligned with the wide table below it. */
+.site-header-inner.container-wide {
+  max-width: 100%;
 }
 
 .site-header .site-title {
   font-weight: 700;
   text-decoration: none;
   font-size: 1.25rem;
+}
+
+.site-header .site-admin-link {
+  font-size: 0.9rem;
 }
 
 .layout {

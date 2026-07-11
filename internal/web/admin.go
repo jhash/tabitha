@@ -13,7 +13,8 @@ import (
 // Task 12 adds an ingestion-trigger section here.
 func AdminHomeHandler(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
-	page := Page("Admin", "tabitha admin", nil,
+	// isSuperadmin is always true here — this route is RequireSuperadmin-gated.
+	page := Page("Admin", "tabitha admin", nil, true,
 		Div(
 			H1(g.Text("Admin")),
 			P(g.Text("Signed in as "+user.Email)),

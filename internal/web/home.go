@@ -9,6 +9,7 @@ import (
 	g "maragu.dev/gomponents"
 	. "maragu.dev/gomponents/html"
 
+	"github.com/jhash/tabitha/internal/auth"
 	"github.com/jhash/tabitha/internal/db"
 )
 
@@ -66,7 +67,8 @@ func HomeHandler(q *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		page := PageWide("Songs", "Jeff's music transcription catalog", nil, homeContent(songs, params, statuses, addedByUsers))
+		viewer, _ := auth.UserFromContext(r.Context())
+		page := PageWide("Songs", "Jeff's music transcription catalog", nil, viewer.Role == db.UserRoleSuperadmin, homeContent(songs, params, statuses, addedByUsers))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_ = page.Render(w)
 	}
