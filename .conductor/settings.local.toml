@@ -1,0 +1,13 @@
+"$schema" = "https://conductor.build/schemas/settings.repo.schema.json"
+file_include_globs = ".env*\n.conductor/*"
+
+[scripts]
+setup = ".conductor/scripts/setup.sh"
+
+[scripts.run.run]
+available_in = "local"
+command = ".conductor/scripts/run.sh"
+default = true
+icon = "play"
+
+[worktree]
