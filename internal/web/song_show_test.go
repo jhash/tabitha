@@ -219,3 +219,20 @@ func TestSongShowEditLinkOptsOutOfHtmxBoost(t *testing.T) {
 		t.Errorf("expected edit link to have hx-boost=\"false\", got: %s", html)
 	}
 }
+
+func TestSongShowHidesPlayLinkWithoutVersion(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	html := renderSongShow(t, song, nil, false, false)
+	if strings.Contains(html, "/play") {
+		t.Errorf("expected no play link when the song has no version yet, got: %s", html)
+	}
+}
+
+func TestSongShowShowsPlayLinkWhenVersionExists(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	blocks := []transcription.Block{{Kind: transcription.SectionHeader, Text: "VERSE 1:"}}
+	html := renderSongShow(t, song, blocks, true, false)
+	if !strings.Contains(html, `href="/songs/42/play" hx-boost="false"`) {
+		t.Errorf("expected a play link pointing at /songs/42/play with hx-boost=\"false\", got: %s", html)
+	}
+}

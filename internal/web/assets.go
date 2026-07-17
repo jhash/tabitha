@@ -20,6 +20,8 @@ type AssetVersions struct {
 	LoraVariable string
 	EditorJS     string
 	EditorCSS    string
+	PlayJS       string
+	PlayCSS      string
 }
 
 // assets holds the process-wide asset versions, set once by NewRouter
@@ -58,6 +60,8 @@ func LoadAssetVersions(dir string) AssetVersions {
 		LoraVariable: loadAssetVersion(dir + "/fonts/Lora-Variable.woff2"),
 		EditorJS:     loadAssetVersion(dir + "/js/editor.js"),
 		EditorCSS:    loadAssetVersion(dir + "/css/editor.css"),
+		PlayJS:       loadAssetVersion(dir + "/js/play.js"),
+		PlayCSS:      loadAssetVersion(dir + "/css/play.css"),
 	}
 }
 

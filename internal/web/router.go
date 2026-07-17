@@ -49,6 +49,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/new", SongNewHandler())
 	r.With(auth.RequireSuperadmin(q)).Post("/songs", CreateSongHandler(q))
 	r.Get("/songs/{idOrSlug}", SongShowHandler(q))
+	r.Get("/songs/{idOrSlug}/play", SongPlayHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/{idOrSlug}/edit", SongEditHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/{idOrSlug}/editor-content", GetSongEditorContentHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Post("/songs/{idOrSlug}/editor-content", PostSongEditorContentHandler(q))

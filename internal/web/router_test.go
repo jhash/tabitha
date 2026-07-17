@@ -844,6 +844,99 @@ func TestSongShowRouteShowsEditLinkOnlyToSuperadmin(t *testing.T) {
 	}
 }
 
+func TestSongPlayRouteRedirectsToShowPageWhenNoVersion(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d/play", song.ID), nil))
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("GET /songs/%d/play status = %d, want %d (nothing to paginate yet)", song.ID, rec.Code, http.StatusFound)
+	}
+	if loc := rec.Header().Get("Location"); loc != fmt.Sprintf("/songs/%d", song.ID) {
+		t.Errorf("Location = %q, want the show page", loc)
+	}
+}
+
+func TestSongPlayRouteRendersPaginatedContentWhenVersionExists(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	blocks := []transcription.Block{{Kind: transcription.SectionHeader, Text: "VERSE 1:"}}
+	content, err := transcription.MarshalDocument(blocks)
+	if err != nil {
+		t.Fatalf("MarshalDocument() error = %v", err)
+	}
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: song.ID, Kind: "primary", Source: "manual_edit",
+		RawText: transcription.Render(blocks), Content: content,
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: song.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/songs/africa/play", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /songs/africa/play status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "VERSE 1:") {
+		t.Errorf("expected the transcription to render, got: %s", body)
+	}
+	if !strings.Contains(body, `id="play-scroller"`) {
+		t.Errorf("expected the paginated scroller element, got: %s", body)
+	}
+	// Play mode is chrome-less — no site header/nav, unlike the show page.
+	if strings.Contains(body, "site-header") {
+		t.Errorf("expected no site header chrome in play mode, got: %s", body)
+	}
+}
+
+func TestSongPlayRouteRedirectsIDToSlugWhenSlugSet(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	r := NewRouter(config.Config{}, q, nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/songs/%d/play", song.ID), nil))
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("GET /songs/%d/play status = %d, want %d", song.ID, rec.Code, http.StatusMovedPermanently)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/songs/africa/play" {
+		t.Errorf("Location = %q, want %q", loc, "/songs/africa/play")
+	}
+}
+
 // TestGoldenPathSearchViewEditStatusAndPaginateJobs is a single, broad
 // walk through the app end to end via real HTTP requests against a real
 // router + real Postgres (no browser/JS involved — a server-rendered,
