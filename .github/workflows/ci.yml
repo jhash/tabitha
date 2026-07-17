@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  go-test:
+    runs-on: self-hosted
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tabitha_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/tabitha_test?sslmode=disable
+      TEST_MIGRATE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/tabitha_test_migrate?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Ensure psql client is installed
+        run: |
+          command -v psql >/dev/null && exit 0
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+      - run: PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE tabitha_test_migrate"
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./... -p 1
+
+  editor-test:
+    runs-on: self-hosted
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: editor/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+      - run: npm test
+
+  e2e:
+    runs-on: self-hosted
+    needs: [go-test, editor-test]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tabitha_e2e_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/tabitha_e2e_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: cd editor && npm ci
+      - run: cd e2e && npm ci
+      - run: cd e2e && npx playwright install --with-deps chromium
+      - run: cd e2e && npx playwright test
