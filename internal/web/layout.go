@@ -73,6 +73,31 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 	})
 }
 
+// PagePlay renders a full HTML5 document like Page, but without any site
+// chrome (header, sidebar, .container padding) — Play mode is a fullscreen,
+// full-bleed reader, not a normal content page, so the body renders exactly
+// as given rather than through layoutRow.
+func PagePlay(title, description string, body ...g.Node) g.Node {
+	return c.HTML5(c.HTML5Props{
+		Title:       title + " · " + siteName,
+		Description: description,
+		Language:    "en",
+		Head: g.Group{
+			Link(
+				Rel("preload"),
+				Href(versionedHref("/static/fonts/Lora-Variable.woff2", assets.LoraVariable)),
+				As("font"),
+				Type("font/woff2"),
+				CrossOrigin("anonymous"),
+			),
+			Link(Rel("stylesheet"), Href(versionedHref("/static/css/reset.css", assets.Reset))),
+			Link(Rel("stylesheet"), Href(versionedHref("/static/css/style.css", assets.Style))),
+			Link(Rel("stylesheet"), Href(versionedHref("/static/css/play.css", assets.PlayCSS))),
+		},
+		Body: g.Group(body),
+	})
+}
+
 func layoutRow(sidebar g.Node, wide bool, mainClass string, body ...g.Node) g.Node {
 	classes := "layout"
 	if sidebar == nil {

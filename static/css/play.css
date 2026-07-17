@@ -1,0 +1,132 @@
+/* Play mode: a fullscreen, paginated ereader-style view of a song's
+   transcription. static/js/play.js sets --page-w/--page-h from the
+   scroller's actual measured size (backed by the 100dvh default below so
+   layout is correct even before that JS runs) and handles swipe/keyboard/
+   button navigation — this file owns the pagination itself, which is pure
+   CSS multi-column: no JS computes where a page breaks. */
+
+:root {
+  --page-w: 100vw;
+  --page-h: 100dvh;
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.play-root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* overflow stays hidden, not auto: play.js drives scrollLeft itself via
+   pointer events (see the pointerdown/pointermove/pointerup handlers) so
+   a swipe is a deliberate page turn, not a native scroll with momentum
+   that could fling past more than one page. touch-action: none stops the
+   browser from also trying to pan/scroll the element on touch, so our
+   handlers are the only thing moving it. */
+.play-scroller {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  touch-action: none;
+}
+
+/* column-width is var(--page-w) verbatim — the exact same number play.js
+   uses for its scroll math — so the rendered page pitch can never drift
+   from the JS pitch. An earlier version instead shrank column-width by a
+   fixed amount and made up the difference with column-gap, which needs
+   two separately-rounded numbers to sum back to var(--page-w); any
+   subpixel mismatch between them compounded linearly with page count
+   (each page a little more misaligned than the last). */
+.play-columns {
+  column-width: var(--page-w);
+  column-gap: 0;
+  column-fill: auto;
+  height: var(--page-h);
+  box-sizing: border-box;
+  font-size: 1.05rem;
+}
+
+/* Carries the left/right/top/bottom page inset. Padding on the multicol
+   container itself (.play-columns) only ever applies once, at the outer
+   edge of the first/last column — not between every page. box-decoration
+   -break: clone repeats a fragmented box's padding on every fragment, so
+   putting the padding here (one level in, on the box multicol actually
+   splits into columns) gives every page the same inset with no per-page
+   arithmetic at all, deterministically. */
+.play-page-inset {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 2rem 2.5rem;
+}
+
+.play-columns h1 {
+  font-family: var(--font-heading);
+  margin-top: 0;
+}
+
+.play-columns .section-header,
+.play-columns .text-line,
+.play-columns .chord-line {
+  break-inside: avoid;
+}
+
+.play-columns .section-header {
+  break-after: avoid;
+}
+
+.play-close,
+.play-prev,
+.play-next {
+  position: fixed;
+  border: none;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.15s;
+}
+
+.play-close:hover,
+.play-prev:hover,
+.play-next:hover {
+  opacity: 0.8;
+}
+
+.play-close {
+  top: 0.5rem;
+  right: 0.75rem;
+  font-size: 2rem;
+  line-height: 1;
+  padding: 0.5rem;
+  z-index: 2;
+}
+
+/* Stop short of the top so .play-close's hit area (fixed at top/right,
+   above) isn't covered by .play-next's full-height strip — .play-next
+   paints later in DOM order and would otherwise win every click there. */
+.play-prev,
+.play-next {
+  top: 3.5rem;
+  height: calc(100% - 3.5rem);
+  width: 3rem;
+  font-size: 2rem;
+  z-index: 1;
+}
+
+.play-prev {
+  left: 0;
+}
+
+.play-next {
+  right: 0;
+}
