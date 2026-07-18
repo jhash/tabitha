@@ -112,6 +112,49 @@
     return key.isMinor ? name + "m" : name;
   }
 
+  // TRANSPOSE_PARAM carries the current semitone offset in the URL (e.g.
+  // "?t=2") so a transposed view survives a refresh, is shareable/
+  // bookmarkable, and — the main reason it exists — can be threaded
+  // through the Show <-> Play mode navigation links below instead of
+  // silently resetting to the original key when you switch views.
+  var TRANSPOSE_PARAM = "t";
+
+  function readInitialSemitones() {
+    var raw = new URLSearchParams(location.search).get(TRANSPOSE_PARAM);
+    var n = parseInt(raw, 10);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // withTransposeParam rewrites href's query string to carry the given
+  // semitone offset (or drops the param entirely at 0, so an untransposed
+  // link stays clean). Used both for this page's own address bar and for
+  // rewriting the Play/Show navigation links below.
+  function withTransposeParam(href, semitones) {
+    var url = new URL(href, location.href);
+    if (semitones === 0) {
+      url.searchParams.delete(TRANSPOSE_PARAM);
+    } else {
+      url.searchParams.set(TRANSPOSE_PARAM, String(semitones));
+    }
+    return url.pathname + url.search + url.hash;
+  }
+
+  // updateTransposeLinks keeps the current semitone offset attached to
+  // whichever navigation link would otherwise drop it: the show page's
+  // "Play" affordance, and Play mode's own close button (play.js reads
+  // data-show-href at click time, so patching the attribute here is all
+  // that's needed — no coordination with play.js itself).
+  function updateTransposeLinks(semitones) {
+    var playLink = document.querySelector(".play-affordance a");
+    if (playLink) {
+      playLink.setAttribute("href", withTransposeParam(playLink.getAttribute("href"), semitones));
+    }
+    var playRoot = document.querySelector(".play-root");
+    if (playRoot && playRoot.dataset.showHref) {
+      playRoot.dataset.showHref = withTransposeParam(playRoot.dataset.showHref, semitones);
+    }
+  }
+
   function initTransposeControls(root) {
     var controls = root.querySelector(".transpose-controls");
     if (!controls) return;
@@ -124,7 +167,7 @@
     var upBtn = controls.querySelector(".transpose-up");
     var baseKey = parseKey(controls.dataset.key);
     var knownKey = !!controls.dataset.key;
-    var semitones = 0;
+    var semitones = readInitialSemitones();
 
     // At net-zero semitones, restore each chord's exact original text
     // rather than round-tripping it through transposeChordToken/spellKey
@@ -142,16 +185,21 @@
           el.textContent = el.dataset.original;
         });
         if (keyEl) keyEl.textContent = knownKey ? controls.dataset.key : "0";
-        return;
+      } else {
+        var current = { pc: baseKey.pc + semitones, isMinor: baseKey.isMinor };
+        var useFlats = keyUsesFlats(current);
+        chordEls.forEach(function (el) {
+          el.textContent = transposeChordToken(el.dataset.original, semitones, useFlats);
+        });
+        if (keyEl) {
+          keyEl.textContent = knownKey ? spellKey(current) : (semitones > 0 ? "+" : "") + semitones;
+        }
       }
-      var current = { pc: baseKey.pc + semitones, isMinor: baseKey.isMinor };
-      var useFlats = keyUsesFlats(current);
-      chordEls.forEach(function (el) {
-        el.textContent = transposeChordToken(el.dataset.original, semitones, useFlats);
-      });
-      if (keyEl) {
-        keyEl.textContent = knownKey ? spellKey(current) : (semitones > 0 ? "+" : "") + semitones;
-      }
+      // history.replaceState, not pushState: this fires on every click of
+      // a rapid-fire stepper, and each step isn't a distinct place the
+      // back button should stop at.
+      history.replaceState(null, "", withTransposeParam(location.href, semitones));
+      updateTransposeLinks(semitones);
     }
 
     downBtn.addEventListener("click", function () {
@@ -162,6 +210,8 @@
       semitones += 1;
       apply();
     });
+
+    apply();
   }
 
   initTransposeControls(document);

@@ -40,4 +40,34 @@ test.describe("transpose", () => {
 
     await expect(page.locator(".chord").first()).toHaveText("Bm");
   });
+
+  test("reflects the semitone offset in the URL and reapplies it on direct load", async ({ page }) => {
+    await page.goto("/songs/e2e-test-song");
+
+    await page.click(".transpose-up");
+    await page.click(".transpose-up");
+    await expect(page).toHaveURL(/\?t=2$/);
+
+    // A fresh load of that same URL (e.g. a bookmarked/shared link)
+    // should reapply the offset immediately, not reset to the original.
+    await page.goto(page.url());
+    await expect(page.locator(".chord").first()).toHaveText("Dm");
+    await expect(page.locator(".transpose-key")).toHaveText("+2");
+  });
+
+  test("carries the transposition from the show page into Play mode and back", async ({ page }) => {
+    await page.goto("/songs/e2e-test-song");
+    await page.click(".transpose-up");
+    await page.click(".transpose-up");
+
+    await expect(page.locator(".play-affordance a")).toHaveAttribute("href", /\?t=2$/);
+
+    await page.click(".play-affordance a");
+    await expect(page).toHaveURL(/\/play\?t=2$/);
+    await expect(page.locator(".chord").first()).toHaveText("Dm");
+
+    await page.click(".play-close");
+    await expect(page).toHaveURL(/\/songs\/e2e-test-song\?t=2$/);
+    await expect(page.locator(".chord").first()).toHaveText("Dm");
+  });
 });
