@@ -7,17 +7,27 @@
 //      static/js/offline-sync.js has already copied every digested song's
 //      pre-rendered HTML (see internal/web/offline_snapshot.go) into an
 //      IndexedDB object store keyed by slug — a plain get(slug), no query
-//      engine involved.
+//      engine involved. Both the normal show page and the fullscreen Play
+//      mode reader are covered (see serveFromOfflineSnapshot) — Play mode
+//      is arguably the more important of the two to have work offline,
+//      since it's the interface actually meant for hands-free use at a
+//      gig.
 importScripts("/static/js/offline-db.js");
 
 var CACHE_NAME = "tabitha-shell-v1";
 
 // The minimum needed to render *something* for any page offline: shared
-// chrome assets, not any particular page.
+// chrome assets, not any particular page. Includes play.css/play.js so
+// Play mode — see serveFromOfflineSnapshot — works offline for a song
+// that was downloaded but never actually opened in Play mode while
+// online; the background catalog sync only ever fetches JSON, so it never
+// opportunistically caches these the way a real page visit would.
 var APP_SHELL = [
   "/static/css/reset.css",
   "/static/css/style.css",
+  "/static/css/play.css",
   "/static/js/htmx.min.js",
+  "/static/js/play.js",
   "/static/fonts/Lora-Variable.woff2",
   "/static/fonts/Lora-Italic-Variable.woff2",
   "/static/manifest.webmanifest",
@@ -101,13 +111,23 @@ function cacheFirst(req) {
     if (cached) {
       return cached;
     }
-    return fetch(req).then(function (res) {
-      var copy = res.clone();
-      caches.open(CACHE_NAME).then(function (cache) {
-        cache.put(req, copy);
+    return fetch(req)
+      .then(function (res) {
+        var copy = res.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          cache.put(req, copy);
+        });
+        return res;
+      })
+      .catch(function () {
+        // Offline, and this exact cache-busted URL (?v=hash) was never
+        // fetched — fall back to whatever's cached for this path under any
+        // query string (the APP_SHELL precache, or an older deploy's
+        // version), ignoring the hash. Only reached offline — online, a
+        // miss always re-fetches the real current version above, so this
+        // never risks serving stale CSS/JS to anyone who has a connection.
+        return caches.match(req, { ignoreSearch: true });
       });
-      return res;
-    });
   });
 }
 
@@ -131,19 +151,29 @@ function handlePageRequest(req) {
 
 function serveFromOfflineSnapshot(req) {
   var path = new URL(req.url).pathname;
-  var match = /^\/songs\/([^/]+)\/?$/.exec(path);
-  if (!match) {
-    // Not a song URL (e.g. the home page, or a numeric-ID redirect target)
-    // — nothing in the snapshot to look it up by.
-    return offlineFallbackResponse();
+
+  var playMatch = /^\/songs\/([^/]+)\/play\/?$/.exec(path);
+  if (playMatch) {
+    return respondFromStoredSong(playMatch[1], "playHtml");
   }
 
-  return offlineDBGetSong(match[1])
+  var showMatch = /^\/songs\/([^/]+)\/?$/.exec(path);
+  if (showMatch) {
+    return respondFromStoredSong(showMatch[1], "html");
+  }
+
+  // Not a song URL (e.g. the home page, a numeric-ID redirect target, or
+  // the superadmin-only editor — none of those are in the snapshot).
+  return offlineFallbackResponse();
+}
+
+function respondFromStoredSong(slug, field) {
+  return offlineDBGetSong(slug)
     .then(function (song) {
-      if (!song) {
+      if (!song || !song[field]) {
         return offlineFallbackResponse();
       }
-      return new Response(song.html, {
+      return new Response(song[field], {
         headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     })

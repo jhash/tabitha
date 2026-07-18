@@ -54,6 +54,9 @@ func TestOfflineSongHandlerServesOneRenderedSong(t *testing.T) {
 	if song.Slug != "africa" || song.Title != "Africa" {
 		t.Errorf("song = %+v, want slug=africa title=Africa", song)
 	}
+	if !strings.Contains(song.PlayHTML, `id="play-root"`) {
+		t.Error("expected the response to include Play mode's HTML too, not just the show page's")
+	}
 }
 
 func TestOfflineSongHandlerServes404ForUnknownSlug(t *testing.T) {

@@ -36,16 +36,20 @@ type OfflineManifestSong struct {
 
 // OfflineSong is what /offline/songs/{slug} returns for one song — everything
 // static/js/offline-sync.js needs to write into its IndexedDB object store,
-// and everything static/sw.js needs to serve that song's page offline.
-// ContentHash uses the exact same SQL expression as the manifest's (see
-// queries/songs.sql), so a stored song's hash and the manifest's hash for
-// that slug are always byte-for-byte comparable.
+// and everything static/sw.js needs to serve that song's page offline, in
+// both of the two page shells that render a song's transcription: the
+// normal show page (HTML) and the fullscreen Play mode reader (PlayHTML —
+// see static/sw.js's serveFromOfflineSnapshot). ContentHash uses the exact
+// same SQL expression as the manifest's (see queries/songs.sql), so a
+// stored song's hash and the manifest's hash for that slug are always
+// byte-for-byte comparable.
 type OfflineSong struct {
 	Slug        string `json:"slug"`
 	ID          int64  `json:"id"`
 	Title       string `json:"title"`
 	Artist      string `json:"artist"`
 	HTML        string `json:"html"`
+	PlayHTML    string `json:"playHtml"`
 	ContentHash string `json:"contentHash"`
 }
 
@@ -99,7 +103,12 @@ func RenderOfflineSong(ctx context.Context, q *db.Queries, slug string) (*Offlin
 	if err != nil {
 		return nil, err
 	}
-	html, err := renderOfflineSongPage(row.Song, blocks, deref(row.TranscriptionVersion.Key))
+	key := deref(row.TranscriptionVersion.Key)
+	html, err := renderOfflineSongPage(row.Song, blocks, key)
+	if err != nil {
+		return nil, err
+	}
+	playHTML, err := renderOfflinePlayPage(row.Song, blocks, key)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +119,7 @@ func RenderOfflineSong(ctx context.Context, q *db.Queries, slug string) (*Offlin
 		Title:       row.Song.Title,
 		Artist:      row.Song.Artist,
 		HTML:        html,
+		PlayHTML:    playHTML,
 		ContentHash: row.ContentHash,
 	}, nil
 }
@@ -120,6 +130,22 @@ func RenderOfflineSong(ctx context.Context, q *db.Queries, slug string) (*Offlin
 func renderOfflineSongPage(song db.Song, blocks []transcription.Block, key string) (string, error) {
 	description := fmt.Sprintf("%s, as performed by %s", song.Title, song.Artist)
 	page := Page(song.Title, description, nil, false, songShowContent(song, blocks, key, true, false))
+	var buf bytes.Buffer
+	if err := page.Render(&buf); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+// renderOfflinePlayPage renders a song exactly as SongPlayHandler would —
+// same PagePlay chrome, same songPlayContent — reusing the same blocks/key
+// already fetched for renderOfflineSongPage rather than a second query, so
+// Play mode (the fullscreen reader this is arguably built for using at a
+// gig) works offline for a song that was downloaded but never actually
+// opened in Play mode while online.
+func renderOfflinePlayPage(song db.Song, blocks []transcription.Block, key string) (string, error) {
+	description := fmt.Sprintf("%s, as performed by %s", song.Title, song.Artist)
+	page := PagePlay(song.Title, description, songPlayContent(song, blocks, key))
 	var buf bytes.Buffer
 	if err := page.Render(&buf); err != nil {
 		return "", err

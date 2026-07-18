@@ -204,6 +204,30 @@ func TestRenderOfflineSongRendersTheFullPage(t *testing.T) {
 	}
 }
 
+// TestRenderOfflineSongIncludesPlayModeHTML guards against Play mode
+// silently going offline-broken: static/sw.js serves PlayHTML for
+// /songs/{slug}/play, so a song downloaded but never actually opened in
+// Play mode while online still needs to work there.
+func TestRenderOfflineSongIncludesPlayModeHTML(t *testing.T) {
+	q := setupTestQueries(t)
+	SetAssetVersions(LoadAssetVersions("../../static"))
+	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
+
+	song, err := RenderOfflineSong(context.Background(), q, "satisfaction")
+	if err != nil {
+		t.Fatalf("RenderOfflineSong() error = %v", err)
+	}
+	if !strings.Contains(song.PlayHTML, `class="chord-word"`) {
+		t.Error("expected Play mode HTML to include chord-word units")
+	}
+	if !strings.Contains(song.PlayHTML, `id="play-root"`) {
+		t.Error("expected Play mode HTML to include the play-root reader chrome")
+	}
+	if strings.Contains(song.PlayHTML, `class="site-header"`) {
+		t.Error("expected Play mode HTML to use PagePlay's chrome-less shell, not the normal site header")
+	}
+}
+
 // TestRenderOfflineSongContentHashMatchesManifest is the whole point of
 // computing the hash in SQL rather than in Go on each side separately: a
 // client's stored hash (from RenderOfflineSong) and the manifest's hash
