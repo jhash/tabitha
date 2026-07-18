@@ -70,4 +70,34 @@ test.describe("transpose", () => {
     await expect(page).toHaveURL(/\/songs\/e2e-test-song\?t=2$/);
     await expect(page.locator(".chord").first()).toHaveText("Dm");
   });
+
+  test("wraps back to the exact original after a full octave of clicks", async ({ page }) => {
+    await page.goto("/songs/e2e-test-song");
+    const original = await page.locator(".chord").allTextContents();
+
+    for (let i = 0; i < 12; i++) {
+      await page.click(".transpose-up");
+    }
+
+    // 12 semitones is an octave — same pitch classes, so this should be
+    // the literal original chart again, not "+12", and the ?t= param
+    // should drop entirely rather than carry a redundant "12".
+    await expect(page.locator(".transpose-key")).toHaveText("0");
+    await expect(page).not.toHaveURL(/[?&]t=/);
+    expect(await page.locator(".chord").allTextContents()).toEqual(original);
+  });
+
+  test("normalizes an out-of-range ?t= link to the original", async ({ page }) => {
+    await page.goto("/songs/e2e-test-song");
+    const original = await page.locator(".chord").allTextContents();
+
+    // A stale/hand-edited link with an offset a full octave (or more) out
+    // of range is musically identical to the original — should normalize
+    // immediately on load, not display "+24".
+    await page.goto("/songs/e2e-test-song?t=24");
+
+    await expect(page.locator(".transpose-key")).toHaveText("0");
+    await expect(page).not.toHaveURL(/[?&]t=/);
+    expect(await page.locator(".chord").allTextContents()).toEqual(original);
+  });
 });
