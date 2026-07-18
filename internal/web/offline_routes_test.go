@@ -12,7 +12,6 @@ import (
 
 func TestOfflineManifestHandlerServesTheCatalogManifest(t *testing.T) {
 	q := setupTestQueries(t)
-	resetManifestCache(t)
 	createDigestedSong(t, q, "Africa", "Toto", "africa")
 	r := NewRouter(config.Config{}, q, nil)
 

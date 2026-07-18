@@ -109,16 +109,31 @@ SELECT slug, updated_at FROM songs WHERE slug <> '' ORDER BY slug;
 -- render, so they're excluded the same way the home page hides them by
 -- default. No transcription content here — that's fetched per song, one
 -- at a time, only for slugs the diff says are missing or stale.
-SELECT slug, updated_at FROM songs
-WHERE current_version_id IS NOT NULL AND slug <> ''
-ORDER BY slug;
+--
+-- content_hash (not updated_at) is the diff signal: it's derived straight
+-- from what actually gets rendered, so it changes exactly when the
+-- rendered output would, with no dependency on every write path
+-- remembering to bump updated_at, and no risk of a touch-but-don't-change
+-- write triggering a needless re-download.
+SELECT
+    songs.slug,
+    md5(transcription_versions.content::text || coalesce(transcription_versions.key, '')) AS content_hash
+FROM songs
+JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
+WHERE songs.current_version_id IS NOT NULL AND songs.slug <> ''
+ORDER BY songs.slug;
 
 -- name: GetSongForOfflineSnapshotBySlug :one
 -- Renders one song at a time for the offline download queue (see
 -- static/js/offline-sync.js) — deliberately not a bulk query, so
 -- downloading the catalog is a series of small, individually retryable
--- requests instead of one big all-or-nothing one.
-SELECT sqlc.embed(songs), sqlc.embed(transcription_versions)
+-- requests instead of one big all-or-nothing one. content_hash uses the
+-- exact same expression as ListSongSlugsForOfflineManifest, so a client's
+-- stored hash and the manifest's hash are always byte-for-byte comparable.
+SELECT
+    sqlc.embed(songs),
+    sqlc.embed(transcription_versions),
+    md5(transcription_versions.content::text || coalesce(transcription_versions.key, '')) AS content_hash
 FROM songs
 JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
 WHERE songs.slug = $1 AND songs.current_version_id IS NOT NULL;

@@ -1,8 +1,9 @@
 // Registers the offline service worker and, in the background after the
 // page has already loaded, works through the catalog one song at a time:
 // diff the lightweight manifest (GET /offline/manifest.json — slugs and
-// timestamps only) against what's already in IndexedDB, then fetch just
-// the missing/stale songs' rendered pages
+// content hashes only, always fresh, never cached server-side — see
+// internal/web/offline_snapshot.go) against what's already in IndexedDB,
+// then fetch just the missing/stale songs' rendered pages
 // (GET /offline/songs/{slug} — see internal/web/offline_snapshot.go), one
 // request at a time so a bad connection degrades gracefully instead of
 // racing a pile of parallel requests. Runs on every page load — home page
@@ -69,21 +70,21 @@
   // where this one left off.
   function reconcileCatalog(manifest) {
     return offlineDBGetAllSongs().then(function (stored) {
-      var storedVersions = {};
+      var storedHashes = {};
       stored.forEach(function (song) {
-        storedVersions[song.slug] = song.updatedAt;
+        storedHashes[song.slug] = song.contentHash;
       });
 
       var manifestSlugs = {};
       var toFetch = [];
       manifest.songs.forEach(function (entry) {
         manifestSlugs[entry.slug] = true;
-        if (storedVersions[entry.slug] !== entry.updatedAt) {
+        if (storedHashes[entry.slug] !== entry.contentHash) {
           toFetch.push(entry.slug);
         }
       });
 
-      var toDelete = Object.keys(storedVersions).filter(function (slug) {
+      var toDelete = Object.keys(storedHashes).filter(function (slug) {
         return !manifestSlugs[slug];
       });
 

@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -17,64 +15,46 @@ import (
 	"github.com/jhash/tabitha/internal/transcription"
 )
 
-// offlineManifestCacheTTL bounds how often the catalog manifest is
-// re-queried — cheap (slug + updated_at only, no rendering), but there's
-// still no reason to hit Postgres on every page load across every visitor.
-const offlineManifestCacheTTL = 5 * time.Minute
-
-// offlineManifestCache holds the most recently built manifest in memory.
-type offlineManifestCache struct {
-	mu      sync.Mutex
-	data    []byte
-	builtAt time.Time
-}
-
-var manifestCache offlineManifestCache
-
 // OfflineManifest is what /offline/manifest.json reports: every digested
-// song's slug and last-updated time, nothing else — enough for
+// song's slug and content hash, nothing else — enough for
 // static/js/offline-sync.js to diff against what it already has in
 // IndexedDB and queue up just the slugs that are missing or stale, without
-// ever shipping the whole catalog's HTML in one request.
+// ever shipping the whole catalog's HTML in one request. Computed fresh on
+// every request rather than cached — the underlying query is cheap (no
+// rendering, just a join and an md5()), and caching it would mean an edit
+// takes up to however-long-the-cache-lives to actually reach the offline
+// download queue.
 type OfflineManifest struct {
 	Version string                `json:"version"`
 	Songs   []OfflineManifestSong `json:"songs"`
 }
 
 type OfflineManifestSong struct {
-	Slug      string `json:"slug"`
-	UpdatedAt string `json:"updatedAt"`
+	Slug        string `json:"slug"`
+	ContentHash string `json:"contentHash"`
 }
 
 // OfflineSong is what /offline/songs/{slug} returns for one song — everything
 // static/js/offline-sync.js needs to write into its IndexedDB object store,
 // and everything static/sw.js needs to serve that song's page offline.
+// ContentHash uses the exact same SQL expression as the manifest's (see
+// queries/songs.sql), so a stored song's hash and the manifest's hash for
+// that slug are always byte-for-byte comparable.
 type OfflineSong struct {
-	Slug      string `json:"slug"`
-	ID        int64  `json:"id"`
-	Title     string `json:"title"`
-	Artist    string `json:"artist"`
-	HTML      string `json:"html"`
-	UpdatedAt string `json:"updatedAt"`
+	Slug        string `json:"slug"`
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	Artist      string `json:"artist"`
+	HTML        string `json:"html"`
+	ContentHash string `json:"contentHash"`
 }
 
-// GetOfflineManifest returns the current cached manifest, building (and
-// caching) a fresh one if the cache is empty or stale.
+// GetOfflineManifest builds the current catalog manifest. Exported as a
+// stable entry point for OfflineManifestHandler even though — unlike an
+// earlier version of this — it does no caching of its own; see
+// OfflineManifest's doc comment for why.
 func GetOfflineManifest(ctx context.Context, q *db.Queries) ([]byte, error) {
-	manifestCache.mu.Lock()
-	defer manifestCache.mu.Unlock()
-
-	if manifestCache.data != nil && time.Since(manifestCache.builtAt) < offlineManifestCacheTTL {
-		return manifestCache.data, nil
-	}
-
-	data, err := buildOfflineManifest(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	manifestCache.data = data
-	manifestCache.builtAt = time.Now()
-	return data, nil
+	return buildOfflineManifest(ctx, q)
 }
 
 func buildOfflineManifest(ctx context.Context, q *db.Queries) ([]byte, error) {
@@ -86,9 +66,8 @@ func buildOfflineManifest(ctx context.Context, q *db.Queries) ([]byte, error) {
 	songs := make([]OfflineManifestSong, 0, len(rows))
 	hash := sha256.New()
 	for _, row := range rows {
-		updatedAt := row.UpdatedAt.Time.UTC().Format(time.RFC3339)
-		songs = append(songs, OfflineManifestSong{Slug: row.Slug, UpdatedAt: updatedAt})
-		fmt.Fprintf(hash, "%s:%s\n", row.Slug, updatedAt)
+		songs = append(songs, OfflineManifestSong{Slug: row.Slug, ContentHash: row.ContentHash})
+		fmt.Fprintf(hash, "%s:%s\n", row.Slug, row.ContentHash)
 	}
 
 	data, err := json.Marshal(OfflineManifest{
@@ -126,12 +105,12 @@ func RenderOfflineSong(ctx context.Context, q *db.Queries, slug string) (*Offlin
 	}
 
 	return &OfflineSong{
-		Slug:      row.Song.Slug,
-		ID:        row.Song.ID,
-		Title:     row.Song.Title,
-		Artist:    row.Song.Artist,
-		HTML:      html,
-		UpdatedAt: row.Song.UpdatedAt.Time.UTC().Format(time.RFC3339),
+		Slug:        row.Song.Slug,
+		ID:          row.Song.ID,
+		Title:       row.Song.Title,
+		Artist:      row.Song.Artist,
+		HTML:        html,
+		ContentHash: row.ContentHash,
 	}, nil
 }
 

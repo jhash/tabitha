@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/transcription"
@@ -74,8 +73,8 @@ func TestBuildOfflineManifestListsDigestedSongSlugs(t *testing.T) {
 	if len(manifest.Songs) != 1 || manifest.Songs[0].Slug != "satisfaction" {
 		t.Errorf("songs = %+v, want one song with slug %q", manifest.Songs, "satisfaction")
 	}
-	if manifest.Songs[0].UpdatedAt == "" {
-		t.Error("expected a non-empty updatedAt")
+	if manifest.Songs[0].ContentHash == "" {
+		t.Error("expected a non-empty contentHash")
 	}
 }
 
@@ -131,25 +130,51 @@ func TestBuildOfflineManifestVersionChangesWhenASongChanges(t *testing.T) {
 	}
 }
 
-func TestGetOfflineManifestCachesWithinTTL(t *testing.T) {
+// TestGetOfflineManifestReflectsAnEditImmediately guards against
+// re-introducing a time-based cache: a caller re-fetching the manifest
+// right after an edit must see the change, with no staleness window.
+func TestGetOfflineManifestReflectsAnEditImmediately(t *testing.T) {
 	q := setupTestQueries(t)
-	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
-	resetManifestCache(t)
+	song := createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
 
-	v1, err := GetOfflineManifest(context.Background(), q)
+	before, err := GetOfflineManifest(context.Background(), q)
 	if err != nil {
 		t.Fatalf("GetOfflineManifest() error = %v", err)
 	}
 
-	createDigestedSong(t, q, "Africa", "Toto", "africa")
+	editedBlocks := []transcription.Block{
+		{Kind: transcription.SectionHeader, Text: "VERSE:"},
+		{
+			Kind: transcription.ChordLyricPair,
+			Tokens: []transcription.Token{
+				{Chord: "A"},
+				{Text: "a completely different line"},
+			},
+		},
+	}
+	content, err := transcription.MarshalDocument(editedBlocks)
+	if err != nil {
+		t.Fatalf("MarshalDocument() error = %v", err)
+	}
+	ctx := context.Background()
+	version, err := q.CreateTranscriptionVersion(ctx, db.CreateTranscriptionVersionParams{
+		SongID: song.ID, Kind: "primary", Source: "manual_edit",
+		RawText: transcription.Render(editedBlocks), Content: content,
+	})
+	if err != nil {
+		t.Fatalf("CreateTranscriptionVersion() error = %v", err)
+	}
+	if err := q.SetSongCurrentVersion(ctx, db.SetSongCurrentVersionParams{ID: song.ID, CurrentVersionID: &version.ID}); err != nil {
+		t.Fatalf("SetSongCurrentVersion() error = %v", err)
+	}
 
-	v2, err := GetOfflineManifest(context.Background(), q)
+	after, err := GetOfflineManifest(context.Background(), q)
 	if err != nil {
 		t.Fatalf("GetOfflineManifest() error = %v", err)
 	}
 
-	if string(v1) != string(v2) {
-		t.Error("GetOfflineManifest() rebuilt within its TTL, want the cached manifest reused")
+	if string(before) == string(after) {
+		t.Error("GetOfflineManifest() unchanged immediately after an edit, want it to reflect the edit with no caching delay")
 	}
 }
 
@@ -174,8 +199,38 @@ func TestRenderOfflineSongRendersTheFullPage(t *testing.T) {
 	if !strings.Contains(song.HTML, `class="site-header"`) {
 		t.Error("expected the rendered HTML to include the normal page chrome, so it's indistinguishable from an online page load")
 	}
-	if song.UpdatedAt == "" {
-		t.Error("expected a non-empty updatedAt")
+	if song.ContentHash == "" {
+		t.Error("expected a non-empty contentHash")
+	}
+}
+
+// TestRenderOfflineSongContentHashMatchesManifest is the whole point of
+// computing the hash in SQL rather than in Go on each side separately: a
+// client's stored hash (from RenderOfflineSong) and the manifest's hash
+// for the same slug (from buildOfflineManifest) must be byte-for-byte
+// equal, or the download-queue diff would never settle.
+func TestRenderOfflineSongContentHashMatchesManifest(t *testing.T) {
+	q := setupTestQueries(t)
+	SetAssetVersions(LoadAssetVersions("../../static"))
+	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
+	ctx := context.Background()
+
+	manifestData, err := buildOfflineManifest(ctx, q)
+	if err != nil {
+		t.Fatalf("buildOfflineManifest() error = %v", err)
+	}
+	var manifest OfflineManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		t.Fatalf("unmarshaling manifest: %v", err)
+	}
+
+	song, err := RenderOfflineSong(ctx, q, "satisfaction")
+	if err != nil {
+		t.Fatalf("RenderOfflineSong() error = %v", err)
+	}
+
+	if len(manifest.Songs) != 1 || manifest.Songs[0].ContentHash != song.ContentHash {
+		t.Errorf("manifest contentHash = %+v, RenderOfflineSong contentHash = %q, want them equal", manifest.Songs, song.ContentHash)
 	}
 }
 
@@ -208,19 +263,4 @@ func TestRenderOfflineSongReturnsNilForUnknownSlug(t *testing.T) {
 	if got != nil {
 		t.Errorf("RenderOfflineSong() = %+v, want nil for an unknown slug", got)
 	}
-}
-
-// resetManifestCache clears the process-wide manifest cache around a test
-// that depends on GetOfflineManifest actually rebuilding (or not), without
-// copying the cache's mutex (go vet: copylocks).
-func resetManifestCache(t *testing.T) {
-	t.Helper()
-	clear := func() {
-		manifestCache.mu.Lock()
-		defer manifestCache.mu.Unlock()
-		manifestCache.data = nil
-		manifestCache.builtAt = time.Time{}
-	}
-	clear()
-	t.Cleanup(clear)
 }
