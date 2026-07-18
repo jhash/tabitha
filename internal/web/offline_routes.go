@@ -4,43 +4,45 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jhash/tabitha/internal/db"
 )
 
-// OfflineSnapshotHandler serves the background-downloaded JSON export of
-// every digested song's rendered page (see offline_snapshot.go) — fetched
-// by static/js/offline-sync.js after page load and written straight into
-// an IndexedDB object store keyed by slug, so static/sw.js can serve song
-// pages offline even if they were never visited while online.
-func OfflineSnapshotHandler(q *db.Queries) http.HandlerFunc {
+// OfflineManifestHandler serves the lightweight catalog manifest (see
+// offline_snapshot.go) — every digested song's slug and last-updated time,
+// no HTML. static/js/offline-sync.js fetches this on every page load and
+// diffs it against IndexedDB to build its one-song-at-a-time download
+// queue, rather than ever shipping the whole catalog in one request.
+func OfflineManifestHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		data, _, err := GetOfflineSnapshot(r.Context(), q)
+		data, err := GetOfflineManifest(r.Context(), q)
 		if err != nil {
-			http.Error(w, "failed to build offline snapshot", http.StatusInternalServerError)
+			http.Error(w, "failed to build offline manifest", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		// Short-lived: the client re-checks /offline/meta before ever
-		// re-fetching this, so there's nothing for an intermediate cache to
-		// usefully hold onto beyond that.
 		w.Header().Set("Cache-Control", "no-cache")
 		_, _ = w.Write(data)
 	}
 }
 
-// OfflineSnapshotMetaHandler serves a small JSON version marker so the
-// client can skip re-downloading the (potentially large) snapshot file
-// when nothing in the catalog has changed since its last copy.
-func OfflineSnapshotMetaHandler(q *db.Queries) http.HandlerFunc {
+// OfflineSongHandler serves one song's rendered page as JSON — what
+// static/js/offline-sync.js's download queue fetches one slug at a time,
+// written straight into an IndexedDB object store keyed by slug so
+// static/sw.js can serve that song's page offline even if it was never
+// visited while online.
+func OfflineSongHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_, version, err := GetOfflineSnapshot(r.Context(), q)
-		if err != nil {
-			http.Error(w, "failed to build offline snapshot", http.StatusInternalServerError)
+		slug := chi.URLParam(r, "slug")
+		song, err := RenderOfflineSong(r.Context(), q, slug)
+		if err != nil || song == nil {
+			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		_ = json.NewEncoder(w).Encode(OfflineSnapshotMeta{Version: version})
+		_ = json.NewEncoder(w).Encode(song)
 	}
 }
 

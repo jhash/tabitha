@@ -236,6 +236,63 @@ func (q *Queries) GetSongCurrentVersion(ctx context.Context, id int64) (GetSongC
 	return i, err
 }
 
+const getSongForOfflineSnapshotBySlug = `-- name: GetSongForOfflineSnapshotBySlug :one
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
+FROM songs
+JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
+WHERE songs.slug = $1 AND songs.current_version_id IS NOT NULL
+`
+
+type GetSongForOfflineSnapshotBySlugRow struct {
+	Song                 Song                 `json:"song"`
+	TranscriptionVersion TranscriptionVersion `json:"transcription_version"`
+}
+
+// Renders one song at a time for the offline download queue (see
+// static/js/offline-sync.js) — deliberately not a bulk query, so
+// downloading the catalog is a series of small, individually retryable
+// requests instead of one big all-or-nothing one.
+func (q *Queries) GetSongForOfflineSnapshotBySlug(ctx context.Context, slug string) (GetSongForOfflineSnapshotBySlugRow, error) {
+	row := q.db.QueryRow(ctx, getSongForOfflineSnapshotBySlug, slug)
+	var i GetSongForOfflineSnapshotBySlugRow
+	err := row.Scan(
+		&i.Song.ID,
+		&i.Song.Title,
+		&i.Song.Artist,
+		&i.Song.Genre,
+		&i.Song.FilmShowAlbum,
+		&i.Song.Decade,
+		&i.Song.BobTag,
+		&i.Song.Status,
+		&i.Song.SourceUrl,
+		&i.Song.Notes,
+		&i.Song.TransposeHint,
+		&i.Song.GoogleDocID,
+		&i.Song.CurrentVersionID,
+		&i.Song.AddedByUserID,
+		&i.Song.CreatedAt,
+		&i.Song.UpdatedAt,
+		&i.Song.ArtistID,
+		&i.Song.PreferredKey,
+		&i.Song.DocCreatedAt,
+		&i.Song.DocModifiedAt,
+		&i.Song.SourceSite,
+		&i.Song.Slug,
+		&i.TranscriptionVersion.ID,
+		&i.TranscriptionVersion.SongID,
+		&i.TranscriptionVersion.Kind,
+		&i.TranscriptionVersion.Source,
+		&i.TranscriptionVersion.RawText,
+		&i.TranscriptionVersion.Content,
+		&i.TranscriptionVersion.Key,
+		&i.TranscriptionVersion.Capo,
+		&i.TranscriptionVersion.IsCurrent,
+		&i.TranscriptionVersion.CreatedBy,
+		&i.TranscriptionVersion.CreatedAt,
+	)
+	return i, err
+}
+
 const listAllSongSlugs = `-- name: ListAllSongSlugs :many
 SELECT id, slug FROM songs WHERE slug <> ''
 `
@@ -348,6 +405,44 @@ func (q *Queries) ListSongIDsWithoutCurrentVersion(ctx context.Context, limit in
 	return items, nil
 }
 
+const listSongSlugsForOfflineManifest = `-- name: ListSongSlugsForOfflineManifest :many
+SELECT slug, updated_at FROM songs
+WHERE current_version_id IS NOT NULL AND slug <> ''
+ORDER BY slug
+`
+
+type ListSongSlugsForOfflineManifestRow struct {
+	Slug      string             `json:"slug"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Every song that actually has something to show offline (a digested
+// transcription) — feeds the lightweight catalog manifest
+// static/js/offline-sync.js diffs against IndexedDB to figure out which
+// songs it still needs to download. Undigested songs have nothing to
+// render, so they're excluded the same way the home page hides them by
+// default. No transcription content here — that's fetched per song, one
+// at a time, only for slugs the diff says are missing or stale.
+func (q *Queries) ListSongSlugsForOfflineManifest(ctx context.Context) ([]ListSongSlugsForOfflineManifestRow, error) {
+	rows, err := q.db.Query(ctx, listSongSlugsForOfflineManifest)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSongSlugsForOfflineManifestRow
+	for rows.Next() {
+		var i ListSongSlugsForOfflineManifestRow
+		if err := rows.Scan(&i.Slug, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSongSlugsForSitemap = `-- name: ListSongSlugsForSitemap :many
 SELECT slug, updated_at FROM songs WHERE slug <> '' ORDER BY slug
 `
@@ -451,78 +546,6 @@ func (q *Queries) ListSongsByTitle(ctx context.Context) ([]ListSongsByTitleRow, 
 			&i.Slug,
 			&i.AddedByName,
 			&i.AddedByEmail,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSongsForOfflineSnapshot = `-- name: ListSongsForOfflineSnapshot :many
-SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
-FROM songs
-JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
-WHERE songs.current_version_id IS NOT NULL AND songs.slug <> ''
-ORDER BY songs.slug
-`
-
-type ListSongsForOfflineSnapshotRow struct {
-	Song                 Song                 `json:"song"`
-	TranscriptionVersion TranscriptionVersion `json:"transcription_version"`
-}
-
-// Every song that actually has something to show offline (a digested
-// transcription) — feeds the background SQLite export so the PWA can
-// render a song's chord chart offline even if it was never visited while
-// online. Undigested songs have nothing to render, so they're excluded
-// the same way the home page hides them by default.
-func (q *Queries) ListSongsForOfflineSnapshot(ctx context.Context) ([]ListSongsForOfflineSnapshotRow, error) {
-	rows, err := q.db.Query(ctx, listSongsForOfflineSnapshot)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListSongsForOfflineSnapshotRow
-	for rows.Next() {
-		var i ListSongsForOfflineSnapshotRow
-		if err := rows.Scan(
-			&i.Song.ID,
-			&i.Song.Title,
-			&i.Song.Artist,
-			&i.Song.Genre,
-			&i.Song.FilmShowAlbum,
-			&i.Song.Decade,
-			&i.Song.BobTag,
-			&i.Song.Status,
-			&i.Song.SourceUrl,
-			&i.Song.Notes,
-			&i.Song.TransposeHint,
-			&i.Song.GoogleDocID,
-			&i.Song.CurrentVersionID,
-			&i.Song.AddedByUserID,
-			&i.Song.CreatedAt,
-			&i.Song.UpdatedAt,
-			&i.Song.ArtistID,
-			&i.Song.PreferredKey,
-			&i.Song.DocCreatedAt,
-			&i.Song.DocModifiedAt,
-			&i.Song.SourceSite,
-			&i.Song.Slug,
-			&i.TranscriptionVersion.ID,
-			&i.TranscriptionVersion.SongID,
-			&i.TranscriptionVersion.Kind,
-			&i.TranscriptionVersion.Source,
-			&i.TranscriptionVersion.RawText,
-			&i.TranscriptionVersion.Content,
-			&i.TranscriptionVersion.Key,
-			&i.TranscriptionVersion.Capo,
-			&i.TranscriptionVersion.IsCurrent,
-			&i.TranscriptionVersion.CreatedBy,
-			&i.TranscriptionVersion.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

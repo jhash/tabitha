@@ -55,47 +55,32 @@ func createDigestedSong(t *testing.T, q *db.Queries, title, artist, slug string)
 	return song
 }
 
-func TestBuildOfflineSnapshotProducesJSONWithRenderedSongs(t *testing.T) {
+func TestBuildOfflineManifestListsDigestedSongSlugs(t *testing.T) {
 	q := setupTestQueries(t)
-	SetAssetVersions(LoadAssetVersions("../../static"))
 	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
 
-	data, version, err := buildOfflineSnapshot(context.Background(), q)
+	data, err := buildOfflineManifest(context.Background(), q)
 	if err != nil {
-		t.Fatalf("buildOfflineSnapshot() error = %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("buildOfflineSnapshot() returned no data")
-	}
-	if version == "" {
-		t.Error("buildOfflineSnapshot() returned an empty version hash")
+		t.Fatalf("buildOfflineManifest() error = %v", err)
 	}
 
-	var songs []OfflineSong
-	if err := json.Unmarshal(data, &songs); err != nil {
-		t.Fatalf("unmarshaling snapshot: %v", err)
+	var manifest OfflineManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("unmarshaling manifest: %v", err)
 	}
-	if len(songs) != 1 {
-		t.Fatalf("got %d songs, want 1", len(songs))
+	if manifest.Version == "" {
+		t.Error("manifest version is empty")
 	}
-	song := songs[0]
-	if song.Slug != "satisfaction" {
-		t.Errorf("slug = %q, want %q", song.Slug, "satisfaction")
+	if len(manifest.Songs) != 1 || manifest.Songs[0].Slug != "satisfaction" {
+		t.Errorf("songs = %+v, want one song with slug %q", manifest.Songs, "satisfaction")
 	}
-	if song.Title != "(I Can't Get No) Satisfaction" {
-		t.Errorf("title = %q, want the song's title", song.Title)
-	}
-	if !strings.Contains(song.HTML, `class="chord-word"`) {
-		t.Error("expected the stored HTML to be the fully rendered song page, including chord-word units")
-	}
-	if !strings.Contains(song.HTML, `class="site-header"`) {
-		t.Error("expected the stored HTML to include the normal page chrome, so it's indistinguishable from an online page load")
+	if manifest.Songs[0].UpdatedAt == "" {
+		t.Error("expected a non-empty updatedAt")
 	}
 }
 
-func TestBuildOfflineSnapshotOmitsSongsWithoutADigestedVersion(t *testing.T) {
+func TestBuildOfflineManifestOmitsSongsWithoutADigestedVersion(t *testing.T) {
 	q := setupTestQueries(t)
-	SetAssetVersions(LoadAssetVersions("../../static"))
 	ctx := context.Background()
 	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
 	if err != nil {
@@ -105,78 +90,136 @@ func TestBuildOfflineSnapshotOmitsSongsWithoutADigestedVersion(t *testing.T) {
 		t.Fatalf("SetSongSlug() error = %v", err)
 	}
 
-	data, _, err := buildOfflineSnapshot(ctx, q)
+	data, err := buildOfflineManifest(ctx, q)
 	if err != nil {
-		t.Fatalf("buildOfflineSnapshot() error = %v", err)
+		t.Fatalf("buildOfflineManifest() error = %v", err)
 	}
 
-	var songs []OfflineSong
-	if err := json.Unmarshal(data, &songs); err != nil {
-		t.Fatalf("unmarshaling snapshot: %v", err)
+	var manifest OfflineManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatalf("unmarshaling manifest: %v", err)
 	}
-	for _, s := range songs {
+	for _, s := range manifest.Songs {
 		if s.Slug == "africa" {
-			t.Errorf("undigested song appeared in the offline snapshot, want it omitted")
+			t.Error("undigested song appeared in the offline manifest, want it omitted")
 		}
 	}
 }
 
-func TestBuildOfflineSnapshotVersionChangesWhenASongChanges(t *testing.T) {
+func TestBuildOfflineManifestVersionChangesWhenASongChanges(t *testing.T) {
 	q := setupTestQueries(t)
-	SetAssetVersions(LoadAssetVersions("../../static"))
 	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
 
-	_, before, err := buildOfflineSnapshot(context.Background(), q)
+	before, err := buildOfflineManifest(context.Background(), q)
 	if err != nil {
-		t.Fatalf("buildOfflineSnapshot() error = %v", err)
+		t.Fatalf("buildOfflineManifest() error = %v", err)
+	}
+	var beforeManifest OfflineManifest
+	_ = json.Unmarshal(before, &beforeManifest)
+
+	createDigestedSong(t, q, "Africa", "Toto", "africa")
+
+	after, err := buildOfflineManifest(context.Background(), q)
+	if err != nil {
+		t.Fatalf("buildOfflineManifest() error = %v", err)
+	}
+	var afterManifest OfflineManifest
+	_ = json.Unmarshal(after, &afterManifest)
+
+	if beforeManifest.Version == afterManifest.Version {
+		t.Error("manifest version unchanged after adding a new digested song")
+	}
+}
+
+func TestGetOfflineManifestCachesWithinTTL(t *testing.T) {
+	q := setupTestQueries(t)
+	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
+	resetManifestCache(t)
+
+	v1, err := GetOfflineManifest(context.Background(), q)
+	if err != nil {
+		t.Fatalf("GetOfflineManifest() error = %v", err)
 	}
 
 	createDigestedSong(t, q, "Africa", "Toto", "africa")
 
-	_, after, err := buildOfflineSnapshot(context.Background(), q)
+	v2, err := GetOfflineManifest(context.Background(), q)
 	if err != nil {
-		t.Fatalf("buildOfflineSnapshot() error = %v", err)
+		t.Fatalf("GetOfflineManifest() error = %v", err)
 	}
 
-	if before == after {
-		t.Error("version hash unchanged after adding a new digested song")
+	if string(v1) != string(v2) {
+		t.Error("GetOfflineManifest() rebuilt within its TTL, want the cached manifest reused")
 	}
 }
 
-func TestGetOfflineSnapshotCachesWithinTTL(t *testing.T) {
+func TestRenderOfflineSongRendersTheFullPage(t *testing.T) {
 	q := setupTestQueries(t)
 	SetAssetVersions(LoadAssetVersions("../../static"))
 	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
-	resetSnapshotCache(t)
 
-	_, v1, err := GetOfflineSnapshot(context.Background(), q)
+	song, err := RenderOfflineSong(context.Background(), q, "satisfaction")
 	if err != nil {
-		t.Fatalf("GetOfflineSnapshot() error = %v", err)
+		t.Fatalf("RenderOfflineSong() error = %v", err)
 	}
-
-	createDigestedSong(t, q, "Africa", "Toto", "africa")
-
-	_, v2, err := GetOfflineSnapshot(context.Background(), q)
-	if err != nil {
-		t.Fatalf("GetOfflineSnapshot() error = %v", err)
+	if song == nil {
+		t.Fatal("RenderOfflineSong() = nil, want a rendered song")
 	}
-
-	if v1 != v2 {
-		t.Error("GetOfflineSnapshot() rebuilt within its TTL, want the cached version reused")
+	if song.Title != "(I Can't Get No) Satisfaction" {
+		t.Errorf("title = %q, want the song's title", song.Title)
+	}
+	if !strings.Contains(song.HTML, `class="chord-word"`) {
+		t.Error("expected the rendered HTML to include chord-word units")
+	}
+	if !strings.Contains(song.HTML, `class="site-header"`) {
+		t.Error("expected the rendered HTML to include the normal page chrome, so it's indistinguishable from an online page load")
+	}
+	if song.UpdatedAt == "" {
+		t.Error("expected a non-empty updatedAt")
 	}
 }
 
-// resetSnapshotCache clears the process-wide snapshot cache around a test
-// that depends on GetOfflineSnapshot actually rebuilding (or not), without
+func TestRenderOfflineSongReturnsNilForUndigestedSlug(t *testing.T) {
+	q := setupTestQueries(t)
+	ctx := context.Background()
+	song, err := q.UpsertSongFromTOC(ctx, db.UpsertSongFromTOCParams{Title: "Africa", Artist: "Toto"})
+	if err != nil {
+		t.Fatalf("UpsertSongFromTOC() error = %v", err)
+	}
+	if err := q.SetSongSlug(ctx, db.SetSongSlugParams{ID: song.ID, Slug: "africa"}); err != nil {
+		t.Fatalf("SetSongSlug() error = %v", err)
+	}
+
+	got, err := RenderOfflineSong(ctx, q, "africa")
+	if err != nil {
+		t.Fatalf("RenderOfflineSong() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("RenderOfflineSong() = %+v, want nil for an undigested song", got)
+	}
+}
+
+func TestRenderOfflineSongReturnsNilForUnknownSlug(t *testing.T) {
+	q := setupTestQueries(t)
+	got, err := RenderOfflineSong(context.Background(), q, "does-not-exist")
+	if err != nil {
+		t.Fatalf("RenderOfflineSong() error = %v", err)
+	}
+	if got != nil {
+		t.Errorf("RenderOfflineSong() = %+v, want nil for an unknown slug", got)
+	}
+}
+
+// resetManifestCache clears the process-wide manifest cache around a test
+// that depends on GetOfflineManifest actually rebuilding (or not), without
 // copying the cache's mutex (go vet: copylocks).
-func resetSnapshotCache(t *testing.T) {
+func resetManifestCache(t *testing.T) {
 	t.Helper()
 	clear := func() {
-		snapshotCache.mu.Lock()
-		defer snapshotCache.mu.Unlock()
-		snapshotCache.data = nil
-		snapshotCache.version = ""
-		snapshotCache.builtAt = time.Time{}
+		manifestCache.mu.Lock()
+		defer manifestCache.mu.Unlock()
+		manifestCache.data = nil
+		manifestCache.builtAt = time.Time{}
 	}
 	clear()
 	t.Cleanup(clear)

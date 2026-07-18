@@ -5,8 +5,11 @@
 // script works unchanged in both a <script> tag and importScripts().
 //
 // Two object stores:
-//   - OFFLINE_META_STORE: a plain key/value store, currently just holding
-//     the snapshot "version" string from GET /offline/meta.
+//   - OFFLINE_META_STORE: a plain key/value store. Currently just
+//     "syncedVersion" — the catalog manifest version
+//     static/js/offline-sync.js last finished downloading every song for
+//     (see reconcileCatalog there). Unset or stale means some songs might
+//     still be missing.
 //   - OFFLINE_SONGS_STORE: one record per digested song, keyed by slug
 //     (its inline keyPath) — a direct get(slug) is all static/sw.js ever
 //     needs to serve a song page that was never visited online.
@@ -37,10 +40,10 @@ function openOfflineDB() {
   });
 }
 
-function offlineDBGetVersion() {
+function offlineDBGetMeta(key) {
   return openOfflineDB().then(function (db) {
     return new Promise(function (resolve, reject) {
-      var req = db.transaction(OFFLINE_META_STORE, "readonly").objectStore(OFFLINE_META_STORE).get("version");
+      var req = db.transaction(OFFLINE_META_STORE, "readonly").objectStore(OFFLINE_META_STORE).get(key);
       req.onsuccess = function () {
         resolve(req.result);
       };
@@ -51,7 +54,23 @@ function offlineDBGetVersion() {
   });
 }
 
-// offlineDBGetSong looks up one song's stored page by slug.
+function offlineDBSetMeta(key, value) {
+  return openOfflineDB().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(OFFLINE_META_STORE, "readwrite");
+      tx.objectStore(OFFLINE_META_STORE).put(value, key);
+      tx.oncomplete = function () {
+        resolve();
+      };
+      tx.onerror = function () {
+        reject(tx.error);
+      };
+    });
+  });
+}
+
+// offlineDBGetSong looks up one song's stored page by slug — used by
+// static/sw.js to serve a song offline that was never actually visited.
 function offlineDBGetSong(slug) {
   return openOfflineDB().then(function (db) {
     return new Promise(function (resolve, reject) {
@@ -66,20 +85,48 @@ function offlineDBGetSong(slug) {
   });
 }
 
-// offlineDBReplaceSnapshot stores a freshly downloaded snapshot: the new
-// version marker and every song row, replacing whatever was there before —
-// all in one transaction, so a reader never observes a half-written
-// snapshot or a version marker that doesn't match the rows it names.
-function offlineDBReplaceSnapshot(version, songs) {
+// offlineDBGetAllSongs reads every stored song — used to diff against the
+// catalog manifest (see static/js/offline-sync.js) and figure out which
+// slugs are missing or stale.
+function offlineDBGetAllSongs() {
   return openOfflineDB().then(function (db) {
     return new Promise(function (resolve, reject) {
-      var tx = db.transaction([OFFLINE_META_STORE, OFFLINE_SONGS_STORE], "readwrite");
-      var metaStore = tx.objectStore(OFFLINE_META_STORE);
-      var songsStore = tx.objectStore(OFFLINE_SONGS_STORE);
-      metaStore.put(version, "version");
-      songsStore.clear();
-      for (var i = 0; i < songs.length; i++) {
-        songsStore.put(songs[i]);
+      var req = db.transaction(OFFLINE_SONGS_STORE, "readonly").objectStore(OFFLINE_SONGS_STORE).getAll();
+      req.onsuccess = function () {
+        resolve(req.result || []);
+      };
+      req.onerror = function () {
+        reject(req.error);
+      };
+    });
+  });
+}
+
+function offlineDBPutSong(song) {
+  return openOfflineDB().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(OFFLINE_SONGS_STORE, "readwrite");
+      tx.objectStore(OFFLINE_SONGS_STORE).put(song);
+      tx.oncomplete = function () {
+        resolve();
+      };
+      tx.onerror = function () {
+        reject(tx.error);
+      };
+    });
+  });
+}
+
+function offlineDBDeleteSongs(slugs) {
+  if (!slugs.length) {
+    return Promise.resolve();
+  }
+  return openOfflineDB().then(function (db) {
+    return new Promise(function (resolve, reject) {
+      var tx = db.transaction(OFFLINE_SONGS_STORE, "readwrite");
+      var store = tx.objectStore(OFFLINE_SONGS_STORE);
+      for (var i = 0; i < slugs.length; i++) {
+        store.delete(slugs[i]);
       }
       tx.oncomplete = function () {
         resolve();

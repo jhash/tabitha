@@ -101,14 +101,24 @@ UPDATE songs SET status = $2, updated_at = now() WHERE id = ANY($1::bigint[]);
 -- name: ListSongSlugsForSitemap :many
 SELECT slug, updated_at FROM songs WHERE slug <> '' ORDER BY slug;
 
--- name: ListSongsForOfflineSnapshot :many
+-- name: ListSongSlugsForOfflineManifest :many
 -- Every song that actually has something to show offline (a digested
--- transcription) — feeds the background SQLite export so the PWA can
--- render a song's chord chart offline even if it was never visited while
--- online. Undigested songs have nothing to render, so they're excluded
--- the same way the home page hides them by default.
+-- transcription) — feeds the lightweight catalog manifest
+-- static/js/offline-sync.js diffs against IndexedDB to figure out which
+-- songs it still needs to download. Undigested songs have nothing to
+-- render, so they're excluded the same way the home page hides them by
+-- default. No transcription content here — that's fetched per song, one
+-- at a time, only for slugs the diff says are missing or stale.
+SELECT slug, updated_at FROM songs
+WHERE current_version_id IS NOT NULL AND slug <> ''
+ORDER BY slug;
+
+-- name: GetSongForOfflineSnapshotBySlug :one
+-- Renders one song at a time for the offline download queue (see
+-- static/js/offline-sync.js) — deliberately not a bulk query, so
+-- downloading the catalog is a series of small, individually retryable
+-- requests instead of one big all-or-nothing one.
 SELECT sqlc.embed(songs), sqlc.embed(transcription_versions)
 FROM songs
 JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
-WHERE songs.current_version_id IS NOT NULL AND songs.slug <> ''
-ORDER BY songs.slug;
+WHERE songs.slug = $1 AND songs.current_version_id IS NOT NULL;

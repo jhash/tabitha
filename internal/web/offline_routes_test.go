@@ -6,17 +6,18 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/jhash/tabitha/internal/config"
 )
 
-func TestOfflineSnapshotHandlerServesJSON(t *testing.T) {
+func TestOfflineManifestHandlerServesTheCatalogManifest(t *testing.T) {
 	q := setupTestQueries(t)
-	SetAssetVersions(LoadAssetVersions("../../static"))
-	resetSnapshotCache(t)
+	resetManifestCache(t)
 	createDigestedSong(t, q, "Africa", "Toto", "africa")
+	r := NewRouter(config.Config{}, q, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/offline/snapshot.json", nil)
 	rec := httptest.NewRecorder()
-	OfflineSnapshotHandler(q)(rec, req)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/offline/manifest.json", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -25,30 +26,46 @@ func TestOfflineSnapshotHandlerServesJSON(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 
-	var songs []OfflineSong
-	if err := json.Unmarshal(rec.Body.Bytes(), &songs); err != nil {
+	var manifest OfflineManifest
+	if err := json.Unmarshal(rec.Body.Bytes(), &manifest); err != nil {
 		t.Fatalf("unmarshaling response body: %v", err)
 	}
-	if len(songs) != 1 || songs[0].Slug != "africa" {
-		t.Errorf("songs = %+v, want one song with slug %q", songs, "africa")
+	if len(manifest.Songs) != 1 || manifest.Songs[0].Slug != "africa" {
+		t.Errorf("songs = %+v, want one song with slug %q", manifest.Songs, "africa")
 	}
 }
 
-func TestOfflineSnapshotMetaHandlerServesAVersion(t *testing.T) {
+func TestOfflineSongHandlerServesOneRenderedSong(t *testing.T) {
 	q := setupTestQueries(t)
 	SetAssetVersions(LoadAssetVersions("../../static"))
-	resetSnapshotCache(t)
 	createDigestedSong(t, q, "Africa", "Toto", "africa")
+	r := NewRouter(config.Config{}, q, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/offline/meta", nil)
 	rec := httptest.NewRecorder()
-	OfflineSnapshotMetaHandler(q)(rec, req)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/offline/songs/africa", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), `"version"`) {
-		t.Errorf("expected a version field in the response, got: %s", rec.Body.String())
+
+	var song OfflineSong
+	if err := json.Unmarshal(rec.Body.Bytes(), &song); err != nil {
+		t.Fatalf("unmarshaling response body: %v", err)
+	}
+	if song.Slug != "africa" || song.Title != "Africa" {
+		t.Errorf("song = %+v, want slug=africa title=Africa", song)
+	}
+}
+
+func TestOfflineSongHandlerServes404ForUnknownSlug(t *testing.T) {
+	q := setupTestQueries(t)
+	r := NewRouter(config.Config{}, q, nil)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/offline/songs/does-not-exist", nil))
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rec.Code)
 	}
 }
 
