@@ -10,6 +10,29 @@ import (
 
 const siteName = "tabitha"
 
+// pwaHead is the manifest/icon/theme-color tags every page variant shares,
+// so the site is installable as a PWA from any page, not just one entry
+// point.
+func pwaHead() g.Group {
+	return g.Group{
+		Link(Rel("manifest"), Href("/static/manifest.webmanifest")),
+		Link(Rel("apple-touch-icon"), Href("/static/icons/apple-touch-icon.png")),
+		Link(Rel("icon"), Href("/static/icons/icon-512.png"), Type("image/png")),
+		Meta(Name("theme-color"), Content("#7e14ff")),
+		Meta(Name("apple-mobile-web-app-capable"), Content("yes")),
+	}
+}
+
+// offlineSyncScript loads the small background scripts that register the
+// service worker and copy the offline data snapshot into IndexedDB —
+// deferred so neither ever delays first paint or interaction.
+func offlineSyncScript() g.Node {
+	return g.Group{
+		Script(Src(versionedHref("/static/js/offline-db.js", assets.OfflineDB)), Defer()),
+		Script(Src(versionedHref("/static/js/offline-sync.js", assets.OfflineSync)), Defer()),
+	}
+}
+
 // Page renders a full HTML5 document with tabitha's shared chrome: a
 // self-hosted, preloaded Lora font (no CDN, no FOUT), the Roux-derived
 // reset plus our stylesheet, self-hosted htmx with hx-boost enabled
@@ -50,6 +73,7 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 			Meta(g.Attr("property", "og:title"), Content(title)),
 			g.If(description != "", Meta(g.Attr("property", "og:description"), Content(description))),
 			Meta(g.Attr("property", "og:type"), Content("website")),
+			pwaHead(),
 			Link(
 				Rel("preload"),
 				Href(versionedHref("/static/fonts/Lora-Variable.woff2", assets.LoraVariable)),
@@ -64,11 +88,19 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 			Header(Class("site-header"),
 				Div(Class(headerClass),
 					A(Class("site-title"), Href("/"), g.Text(siteName)),
-					g.If(isSuperadmin, A(Class("site-admin-link"), Href("/admin"), g.Text("Admin"))),
+					Div(Class("site-header-right"),
+						// Populated by static/js/offline-sync.js — only in an
+						// installed PWA or the Capacitor wrapper (see there),
+						// so it stays hidden (and the JS never touches it) for
+						// an ordinary browser tab.
+						Span(ID("offline-status"), Class("offline-status"), Hidden("")),
+						g.If(isSuperadmin, A(Class("site-admin-link"), Href("/admin"), g.Text("Admin"))),
+					),
 				),
 			),
 			layoutRow(sidebar, wide, mainClass, body...),
 			Script(Src(versionedHref("/static/js/htmx.min.js", assets.Htmx))),
+			offlineSyncScript(),
 		},
 	})
 }
@@ -83,6 +115,7 @@ func PagePlay(title, description string, body ...g.Node) g.Node {
 		Description: description,
 		Language:    "en",
 		Head: g.Group{
+			pwaHead(),
 			Link(
 				Rel("preload"),
 				Href(versionedHref("/static/fonts/Lora-Variable.woff2", assets.LoraVariable)),
@@ -94,7 +127,7 @@ func PagePlay(title, description string, body ...g.Node) g.Node {
 			Link(Rel("stylesheet"), Href(versionedHref("/static/css/style.css", assets.Style))),
 			Link(Rel("stylesheet"), Href(versionedHref("/static/css/play.css", assets.PlayCSS))),
 		},
-		Body: g.Group(body),
+		Body: g.Group(append(body, offlineSyncScript())),
 	})
 }
 

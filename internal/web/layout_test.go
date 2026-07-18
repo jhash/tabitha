@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	g "maragu.dev/gomponents"
 )
 
 func renderPage(t *testing.T) string {
@@ -172,6 +174,67 @@ func TestLoraFontFilesExistAndAreSmallEnoughToPreload(t *testing.T) {
 		// as render-blocking-ish should stay well under 200KB.
 		if info.Size() > 200*1024 {
 			t.Errorf("%s is %d bytes, expected under 200KB", f, info.Size())
+		}
+	}
+}
+
+func TestPageLinksPWAManifestAndIcons(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, `rel="manifest" href="/static/manifest.webmanifest"`) {
+		t.Error("expected page head to link the web app manifest")
+	}
+	if !strings.Contains(html, `rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png"`) {
+		t.Error("expected page head to link an apple-touch-icon")
+	}
+	if !strings.Contains(html, `name="theme-color"`) {
+		t.Error("expected page head to set a theme-color meta tag")
+	}
+}
+
+func TestPageRegistersServiceWorkerViaOfflineSyncScript(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, "/static/js/offline-db.js") {
+		t.Error("expected page to load offline-db.js")
+	}
+	if !strings.Contains(html, "/static/js/offline-sync.js") {
+		t.Error("expected page to load offline-sync.js")
+	}
+	if !strings.Contains(html, "defer") {
+		t.Error("expected offline scripts to be deferred so they never delay first paint")
+	}
+}
+
+func TestPageRendersOfflineStatusHiddenByDefault(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, `id="offline-status"`) {
+		t.Error("expected the header to include an #offline-status element for offline-sync.js to populate")
+	}
+	if !strings.Contains(html, `<span id="offline-status" class="offline-status" hidden=""`) {
+		t.Errorf("expected #offline-status to start hidden (only shown by JS in an installed app), got: %s", html)
+	}
+}
+
+func TestPagePlayAlsoLoadsOfflineSyncScript(t *testing.T) {
+	var buf bytes.Buffer
+	if err := PagePlay("Test", "Test play page", g.Text("body")).Render(&buf); err != nil {
+		t.Fatalf("failed to render play page: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, "/static/js/offline-sync.js") {
+		t.Error("expected play mode — the actual offline use case — to load offline-sync.js too")
+	}
+}
+
+func TestPWAIconsExistOnDisk(t *testing.T) {
+	for _, f := range []string{
+		"static/icons/icon-192.png",
+		"static/icons/icon-512.png",
+		"static/icons/icon-maskable-192.png",
+		"static/icons/icon-maskable-512.png",
+		"static/icons/apple-touch-icon.png",
+	} {
+		if _, err := os.Stat(repoPath(t, f)); err != nil {
+			t.Errorf("expected PWA icon to exist on disk: %s (%v)", f, err)
 		}
 	}
 }

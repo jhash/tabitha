@@ -87,6 +87,30 @@ a:hover {
   font-size: 0.9rem;
 }
 
+.site-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Populated by static/js/offline-sync.js — hidden (via the `hidden`
+   attribute set server-side) except in an installed PWA or the Capacitor
+   wrapper, where it shows live "x/total downloaded" progress. */
+.offline-status {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.offline-status.is-syncing {
+  animation: offline-status-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes offline-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 .layout {
   display: flex;
   align-items: flex-start;
