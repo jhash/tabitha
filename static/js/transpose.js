@@ -119,10 +119,24 @@
   // silently resetting to the original key when you switch views.
   var TRANSPOSE_PARAM = "t";
 
+  // wrapSemitones reduces any semitone count to its shortest-path
+  // representative in (-6, 6] — 12 semitones is an octave, i.e. back to
+  // the original pitch classes, so nothing is ever more than half an
+  // octave from 0 and continuing to press +/- cycles back through 0
+  // exactly every 12 steps rather than growing without bound (n=12 -> 0,
+  // n=13 -> 1, ...). 0 always means "the untransposed original" — see
+  // apply()'s exact-original-text restore below, which only triggers on
+  // this normalized value, so any equivalent-but-nonzero input (an old
+  // "?t=12" link, say) is treated as the original too.
+  function wrapSemitones(n) {
+    var m = ((n % 12) + 12) % 12;
+    return m > 6 ? m - 12 : m;
+  }
+
   function readInitialSemitones() {
     var raw = new URLSearchParams(location.search).get(TRANSPOSE_PARAM);
     var n = parseInt(raw, 10);
-    return isNaN(n) ? 0 : n;
+    return isNaN(n) ? 0 : wrapSemitones(n);
   }
 
   // withTransposeParam rewrites href's query string to carry the given
@@ -203,11 +217,11 @@
     }
 
     downBtn.addEventListener("click", function () {
-      semitones -= 1;
+      semitones = wrapSemitones(semitones - 1);
       apply();
     });
     upBtn.addEventListener("click", function () {
-      semitones += 1;
+      semitones = wrapSemitones(semitones + 1);
       apply();
     });
 
