@@ -60,6 +60,7 @@ func songPlayContent(song db.Song, blocks []transcription.Block, key string) g.N
 					H1(g.Text(song.Title)),
 					g.If(song.Artist != "", P(Class("byline"), g.Text("As performed by "+song.Artist))),
 					g.If(key != "", P(Class("key"), g.Text("Key: "), B(g.Text(strings.ToUpper(key))))),
+					transposeControlsNode(key),
 					renderTranscriptionHTML(omitDuplicateHeaderLines(blocks, song)),
 				),
 			),
@@ -68,5 +69,6 @@ func songPlayContent(song db.Song, blocks []transcription.Block, key string) g.N
 		Button(Class("play-prev"), g.Attr("aria-label", "Previous page"), Type("button"), g.Text("‹")),
 		Button(Class("play-next"), g.Attr("aria-label", "Next page"), Type("button"), g.Text("›")),
 		Script(Type("module"), Src(versionedHref("/static/js/play.js", assets.PlayJS))),
+		transposeScript(),
 	)
 }

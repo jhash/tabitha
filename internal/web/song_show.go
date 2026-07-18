@@ -104,9 +104,11 @@ func songShowContent(song db.Song, blocks []transcription.Block, key string, has
 		g.If(!hasVersion,
 			P(Class("no-content"), g.Text("This song hasn't been digested from Jeff's Google Doc yet.")),
 		),
+		g.If(hasVersion, transposeControlsNode(key)),
 		g.If(hasVersion,
 			renderTranscriptionHTML(omitDuplicateHeaderLines(blocks, song)),
 		),
+		g.If(hasVersion, transposeScript()),
 	)
 }
 

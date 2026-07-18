@@ -236,3 +236,46 @@ func TestSongShowShowsPlayLinkWhenVersionExists(t *testing.T) {
 		t.Errorf("expected a play link pointing at /songs/42/play with hx-boost=\"false\", got: %s", html)
 	}
 }
+
+func TestSongShowHidesTransposeControlsWithoutVersion(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	html := renderSongShow(t, song, nil, false, false)
+	if strings.Contains(html, "transpose-controls") {
+		t.Errorf("expected no transpose controls when there's no transcription to transpose, got: %s", html)
+	}
+	if strings.Contains(html, "transpose.js") {
+		t.Errorf("expected no transpose script when there's no transcription to transpose, got: %s", html)
+	}
+}
+
+func TestSongShowShowsTransposeControlsWhenVersionExists(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	blocks := []transcription.Block{
+		{Kind: transcription.SectionHeader, Text: "VERSE 1:"},
+		{Kind: transcription.ChordLyricPair, Tokens: []transcription.Token{{Chord: "Bb"}, {Text: "hi"}}},
+	}
+	html := renderSongShowWithKey(t, song, blocks, "Bb", true, false)
+
+	if !strings.Contains(html, `class="transpose-controls" data-key="Bb"`) {
+		t.Errorf("expected transpose controls seeded with the song's key, got: %s", html)
+	}
+	if !strings.Contains(html, `class="transpose-down"`) || !strings.Contains(html, `class="transpose-up"`) {
+		t.Errorf("expected down/up transpose buttons, got: %s", html)
+	}
+	if !strings.Contains(html, `src="/static/js/transpose.js"`) {
+		t.Errorf("expected the transpose script to load, got: %s", html)
+	}
+}
+
+func TestSongShowTransposeControlsFallBackToZeroWithoutKnownKey(t *testing.T) {
+	song := db.Song{ID: 42, Title: "Africa", Artist: "Toto"}
+	blocks := []transcription.Block{{Kind: transcription.SectionHeader, Text: "VERSE 1:"}}
+	html := renderSongShow(t, song, blocks, true, false)
+
+	if !strings.Contains(html, `class="transpose-controls" data-key=""`) {
+		t.Errorf("expected transpose controls with an empty data-key when no key is known, got: %s", html)
+	}
+	if !strings.Contains(html, `class="transpose-key">0<`) {
+		t.Errorf("expected the key readout to fall back to \"0\" (semitone offset), got: %s", html)
+	}
+}

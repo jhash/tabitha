@@ -22,12 +22,15 @@ var CACHE_NAME = "tabitha-shell-v1";
 // that was downloaded but never actually opened in Play mode while
 // online; the background catalog sync only ever fetches JSON, so it never
 // opportunistically caches these the way a real page visit would.
+// transpose.js is the same story: it's the on-the-fly chord transposer
+// (static/js/transpose.js), needed by both the show page and Play mode.
 var APP_SHELL = [
   "/static/css/reset.css",
   "/static/css/style.css",
   "/static/css/play.css",
   "/static/js/htmx.min.js",
   "/static/js/play.js",
+  "/static/js/transpose.js",
   "/static/fonts/Lora-Variable.woff2",
   "/static/fonts/Lora-Italic-Variable.woff2",
   "/static/manifest.webmanifest",
