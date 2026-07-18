@@ -204,6 +204,16 @@ func TestPageRegistersServiceWorkerViaOfflineSyncScript(t *testing.T) {
 	}
 }
 
+func TestPageRendersOfflineStatusHiddenByDefault(t *testing.T) {
+	html := renderPage(t)
+	if !strings.Contains(html, `id="offline-status"`) {
+		t.Error("expected the header to include an #offline-status element for offline-sync.js to populate")
+	}
+	if !strings.Contains(html, `<span id="offline-status" class="offline-status" hidden=""`) {
+		t.Errorf("expected #offline-status to start hidden (only shown by JS in an installed app), got: %s", html)
+	}
+}
+
 func TestPagePlayAlsoLoadsOfflineSyncScript(t *testing.T) {
 	var buf bytes.Buffer
 	if err := PagePlay("Test", "Test play page", g.Text("body")).Render(&buf); err != nil {

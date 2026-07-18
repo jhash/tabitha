@@ -88,7 +88,14 @@ func page(title, description string, sidebar g.Node, wide, isSuperadmin bool, bo
 			Header(Class("site-header"),
 				Div(Class(headerClass),
 					A(Class("site-title"), Href("/"), g.Text(siteName)),
-					g.If(isSuperadmin, A(Class("site-admin-link"), Href("/admin"), g.Text("Admin"))),
+					Div(Class("site-header-right"),
+						// Populated by static/js/offline-sync.js — only in an
+						// installed PWA or the Capacitor wrapper (see there),
+						// so it stays hidden (and the JS never touches it) for
+						// an ordinary browser tab.
+						Span(ID("offline-status"), Class("offline-status"), Hidden("")),
+						g.If(isSuperadmin, A(Class("site-admin-link"), Href("/admin"), g.Text("Admin"))),
+					),
 				),
 			),
 			layoutRow(sidebar, wide, mainClass, body...),
