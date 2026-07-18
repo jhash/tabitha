@@ -4,16 +4,13 @@
 //   1. Any page actually visited while online gets cached as-is (below,
 //      handlePageRequest) — the classic "revisit what you saw" PWA cache.
 //   2. A song that was *never* visited can still work offline, because
-//      static/js/offline-sync.js has already copied a background-built
-//      SQLite export of every digested song's pre-rendered HTML (see
-//      internal/web/offline_snapshot.go) into IndexedDB. sql.js (vendored,
-//      static/js/vendor/sqljs/) is loaded lazily, right here, only once
-//      that fallback path is actually needed — it's never fetched on a
-//      normal page load.
+//      static/js/offline-sync.js has already copied every digested song's
+//      pre-rendered HTML (see internal/web/offline_snapshot.go) into an
+//      IndexedDB object store keyed by slug — a plain get(slug), no query
+//      engine involved.
 importScripts("/static/js/offline-db.js");
 
 var CACHE_NAME = "tabitha-shell-v1";
-var SQLJS_DIR = "/static/js/vendor/sqljs/";
 
 // The minimum needed to render *something* for any page offline: shared
 // chrome assets, not any particular page.
@@ -140,53 +137,19 @@ function serveFromOfflineSnapshot(req) {
     // — nothing in the snapshot to look it up by.
     return offlineFallbackResponse();
   }
-  var slug = match[1];
 
-  return offlineDBGet("data")
-    .then(function (data) {
-      if (!data) {
+  return offlineDBGetSong(match[1])
+    .then(function (song) {
+      if (!song) {
         return offlineFallbackResponse();
       }
-      return querySnapshotForSlug(data, slug).then(function (html) {
-        if (!html) {
-          return offlineFallbackResponse();
-        }
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
-        });
+      return new Response(song.html, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
       });
     })
     .catch(function () {
       return offlineFallbackResponse();
     });
-}
-
-var sqlJsPromise = null;
-function loadSqlJs() {
-  if (!sqlJsPromise) {
-    importScripts(SQLJS_DIR + "sql-wasm.js");
-    sqlJsPromise = initSqlJs({
-      locateFile: function (file) {
-        return SQLJS_DIR + file;
-      },
-    });
-  }
-  return sqlJsPromise;
-}
-
-function querySnapshotForSlug(data, slug) {
-  return loadSqlJs().then(function (SQL) {
-    var db = new SQL.Database(new Uint8Array(data));
-    try {
-      var stmt = db.prepare("SELECT html FROM songs WHERE slug = ?");
-      stmt.bind([slug]);
-      var html = stmt.step() ? stmt.getAsObject().html : null;
-      stmt.free();
-      return html;
-    } finally {
-      db.close();
-    }
-  });
 }
 
 function offlineFallbackResponse() {

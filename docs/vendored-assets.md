@@ -11,7 +11,6 @@ source in this repo.
 | `static/fonts/Lora-Variable.woff2` | [google/fonts](https://github.com/google/fonts) `ofl/lora/Lora[wght].ttf`, converted to WOFF2 with `woff2_compress` (`brew install woff2`) | — | SIL OFL 1.1, see `static/fonts/OFL.txt`. Variable font, weight axis 400–700 covers regular *and* bold in one file. |
 | `static/fonts/Lora-Italic-Variable.woff2` | same repo, `ofl/lora/Lora-Italic[wght].ttf` | — | Same license/axis notes as above, italic + bold-italic in one file. |
 | `static/js/htmx.min.js` | [htmx.org](https://htmx.org) via unpkg | 2.0.10 | BSD 2-Clause |
-| `static/js/vendor/sqljs/sql-wasm.js`, `sql-wasm.wasm` | [sql.js](https://github.com/sql-js/sql.js) (`npm pack sql.js`, `dist/`) | 1.13.0 | MIT, see `static/js/vendor/sqljs/LICENSE`. Loaded lazily by `static/sw.js` only when serving an offline navigation for a song not already in the HTTP cache — never fetched on a normal page load. |
 
 Font conversion, if re-doing it:
 

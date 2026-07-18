@@ -46,7 +46,7 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 	r.Get("/robots.txt", RobotsTxtHandler(cfg.AppURL))
 	r.Get("/sitemap.xml", SitemapHandler(q, cfg.AppURL))
 	r.Get("/sw.js", ServiceWorkerHandler())
-	r.Get("/offline/snapshot.sqlite", OfflineSnapshotHandler(q))
+	r.Get("/offline/snapshot.json", OfflineSnapshotHandler(q))
 	r.Get("/offline/meta", OfflineSnapshotMetaHandler(q))
 	r.Get("/", HomeHandler(q))
 	r.With(auth.RequireSuperadmin(q)).Get("/songs/new", SongNewHandler())

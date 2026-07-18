@@ -215,17 +215,6 @@ func TestPagePlayAlsoLoadsOfflineSyncScript(t *testing.T) {
 	}
 }
 
-func TestVendoredSqlJsExistsOnDisk(t *testing.T) {
-	for _, f := range []string{
-		"static/js/vendor/sqljs/sql-wasm.js",
-		"static/js/vendor/sqljs/sql-wasm.wasm",
-	} {
-		if _, err := os.Stat(repoPath(t, f)); err != nil {
-			t.Errorf("expected vendored asset to exist on disk: %s (%v)", f, err)
-		}
-	}
-}
-
 func TestPWAIconsExistOnDisk(t *testing.T) {
 	for _, f := range []string{
 		"static/icons/icon-192.png",

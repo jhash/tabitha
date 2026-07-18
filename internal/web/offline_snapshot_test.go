@@ -2,13 +2,10 @@ package web
 
 import (
 	"context"
-	"database/sql"
-	"os"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
-
-	_ "modernc.org/sqlite"
 
 	"github.com/jhash/tabitha/internal/db"
 	"github.com/jhash/tabitha/internal/transcription"
@@ -58,7 +55,7 @@ func createDigestedSong(t *testing.T, q *db.Queries, title, artist, slug string)
 	return song
 }
 
-func TestBuildOfflineSnapshotProducesAQueryableSQLiteFileWithRenderedSongs(t *testing.T) {
+func TestBuildOfflineSnapshotProducesJSONWithRenderedSongs(t *testing.T) {
 	q := setupTestQueries(t)
 	SetAssetVersions(LoadAssetVersions("../../static"))
 	createDigestedSong(t, q, "(I Can't Get No) Satisfaction", "Rolling Stones, the", "satisfaction")
@@ -74,24 +71,24 @@ func TestBuildOfflineSnapshotProducesAQueryableSQLiteFileWithRenderedSongs(t *te
 		t.Error("buildOfflineSnapshot() returned an empty version hash")
 	}
 
-	path := writeTempSQLiteFile(t, data)
-	sqlDB, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatalf("opening produced sqlite file: %v", err)
+	var songs []OfflineSong
+	if err := json.Unmarshal(data, &songs); err != nil {
+		t.Fatalf("unmarshaling snapshot: %v", err)
 	}
-	defer sqlDB.Close()
-
-	var html, title string
-	if err := sqlDB.QueryRow(`SELECT title, html FROM songs WHERE slug = ?`, "satisfaction").Scan(&title, &html); err != nil {
-		t.Fatalf("querying snapshot row: %v", err)
+	if len(songs) != 1 {
+		t.Fatalf("got %d songs, want 1", len(songs))
 	}
-	if title != "(I Can't Get No) Satisfaction" {
-		t.Errorf("title = %q, want the song's title", title)
+	song := songs[0]
+	if song.Slug != "satisfaction" {
+		t.Errorf("slug = %q, want %q", song.Slug, "satisfaction")
 	}
-	if !strings.Contains(html, `class="chord-word"`) {
+	if song.Title != "(I Can't Get No) Satisfaction" {
+		t.Errorf("title = %q, want the song's title", song.Title)
+	}
+	if !strings.Contains(song.HTML, `class="chord-word"`) {
 		t.Error("expected the stored HTML to be the fully rendered song page, including chord-word units")
 	}
-	if !strings.Contains(html, `class="site-header"`) {
+	if !strings.Contains(song.HTML, `class="site-header"`) {
 		t.Error("expected the stored HTML to include the normal page chrome, so it's indistinguishable from an online page load")
 	}
 }
@@ -113,19 +110,14 @@ func TestBuildOfflineSnapshotOmitsSongsWithoutADigestedVersion(t *testing.T) {
 		t.Fatalf("buildOfflineSnapshot() error = %v", err)
 	}
 
-	path := writeTempSQLiteFile(t, data)
-	sqlDB, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatalf("opening produced sqlite file: %v", err)
+	var songs []OfflineSong
+	if err := json.Unmarshal(data, &songs); err != nil {
+		t.Fatalf("unmarshaling snapshot: %v", err)
 	}
-	defer sqlDB.Close()
-
-	var count int
-	if err := sqlDB.QueryRow(`SELECT count(*) FROM songs WHERE slug = ?`, "africa").Scan(&count); err != nil {
-		t.Fatalf("querying snapshot row count: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("undigested song appeared in the offline snapshot, want it omitted")
+	for _, s := range songs {
+		if s.Slug == "africa" {
+			t.Errorf("undigested song appeared in the offline snapshot, want it omitted")
+		}
 	}
 }
 
@@ -188,19 +180,4 @@ func resetSnapshotCache(t *testing.T) {
 	}
 	clear()
 	t.Cleanup(clear)
-}
-
-func writeTempSQLiteFile(t *testing.T, data []byte) string {
-	t.Helper()
-	f, err := os.CreateTemp(t.TempDir(), "snapshot-*.sqlite")
-	if err != nil {
-		t.Fatalf("creating temp file: %v", err)
-	}
-	if _, err := f.Write(data); err != nil {
-		t.Fatalf("writing temp file: %v", err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatalf("closing temp file: %v", err)
-	}
-	return f.Name()
 }

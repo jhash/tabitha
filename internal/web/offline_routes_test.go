@@ -1,34 +1,36 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestOfflineSnapshotHandlerServesASQLiteFile(t *testing.T) {
+func TestOfflineSnapshotHandlerServesJSON(t *testing.T) {
 	q := setupTestQueries(t)
 	SetAssetVersions(LoadAssetVersions("../../static"))
 	resetSnapshotCache(t)
 	createDigestedSong(t, q, "Africa", "Toto", "africa")
 
-	req := httptest.NewRequest(http.MethodGet, "/offline/snapshot.sqlite", nil)
+	req := httptest.NewRequest(http.MethodGet, "/offline/snapshot.json", nil)
 	rec := httptest.NewRecorder()
 	OfflineSnapshotHandler(q)(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/x-sqlite3" {
-		t.Errorf("Content-Type = %q, want application/x-sqlite3", ct)
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
-	if rec.Body.Len() == 0 {
-		t.Error("expected a non-empty SQLite file body")
+
+	var songs []OfflineSong
+	if err := json.Unmarshal(rec.Body.Bytes(), &songs); err != nil {
+		t.Fatalf("unmarshaling response body: %v", err)
 	}
-	// SQLite files start with this fixed 16-byte magic header.
-	if !strings.HasPrefix(rec.Body.String(), "SQLite format 3\x00") {
-		t.Error("expected the response body to start with the SQLite file header")
+	if len(songs) != 1 || songs[0].Slug != "africa" {
+		t.Errorf("songs = %+v, want one song with slug %q", songs, "africa")
 	}
 }
 

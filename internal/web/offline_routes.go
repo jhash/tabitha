@@ -7,11 +7,11 @@ import (
 	"github.com/jhash/tabitha/internal/db"
 )
 
-// OfflineSnapshotHandler serves the background-downloaded SQLite export of
+// OfflineSnapshotHandler serves the background-downloaded JSON export of
 // every digested song's rendered page (see offline_snapshot.go) — fetched
-// by static/js/offline-sync.js after page load and stashed in IndexedDB so
-// static/sw.js can serve song pages offline even if they were never
-// visited while online.
+// by static/js/offline-sync.js after page load and written straight into
+// an IndexedDB object store keyed by slug, so static/sw.js can serve song
+// pages offline even if they were never visited while online.
 func OfflineSnapshotHandler(q *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, _, err := GetOfflineSnapshot(r.Context(), q)
@@ -19,7 +19,7 @@ func OfflineSnapshotHandler(q *db.Queries) http.HandlerFunc {
 			http.Error(w, "failed to build offline snapshot", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/x-sqlite3")
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		// Short-lived: the client re-checks /offline/meta before ever
 		// re-fetching this, so there's nothing for an intermediate cache to
 		// usefully hold onto beyond that.

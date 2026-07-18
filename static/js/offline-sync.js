@@ -1,9 +1,10 @@
 // Registers the offline service worker and, in the background after the
 // page has already loaded, copies the latest offline data snapshot (every
 // digested song, pre-rendered — see internal/web/offline_snapshot.go) into
-// IndexedDB. Deliberately tiny and dependency-free: this never delays
-// first paint, and does no rendering itself — static/sw.js does the actual
-// offline serving, reading what this script stored.
+// IndexedDB, one record per song, keyed by slug. Deliberately tiny and
+// dependency-free: this never delays first paint, and does no rendering
+// itself — static/sw.js does the actual offline serving, reading what this
+// script stored.
 (function () {
   "use strict";
 
@@ -27,17 +28,17 @@
         if (!meta || !meta.version) {
           return;
         }
-        return offlineDBGet("version").then(function (storedVersion) {
+        return offlineDBGetVersion().then(function (storedVersion) {
           if (storedVersion === meta.version) {
             return; // already have the current catalog offline
           }
-          return fetch("/offline/snapshot.sqlite", { cache: "no-store" })
+          return fetch("/offline/snapshot.json", { cache: "no-store" })
             .then(function (res) {
-              return res.ok ? res.arrayBuffer() : null;
+              return res.ok ? res.json() : null;
             })
-            .then(function (data) {
-              if (data) {
-                return offlineDBPutSnapshot(meta.version, data);
+            .then(function (songs) {
+              if (songs) {
+                return offlineDBReplaceSnapshot(meta.version, songs);
               }
             });
         });
