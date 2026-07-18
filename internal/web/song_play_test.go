@@ -69,3 +69,15 @@ func TestSongPlayIncludesScrollerAndNavControls(t *testing.T) {
 		t.Errorf("expected close/prev/next controls, got: %s", html)
 	}
 }
+
+func TestSongPlayIncludesTransposeControls(t *testing.T) {
+	song := db.Song{ID: 7, Slug: "africa", Title: "Africa"}
+	html := renderSongPlay(t, song, nil, "A")
+
+	if !strings.Contains(html, `class="transpose-controls" data-key="A"`) {
+		t.Errorf("expected transpose controls seeded with the song's key, got: %s", html)
+	}
+	if !strings.Contains(html, `src="/static/js/transpose.js"`) {
+		t.Errorf("expected the transpose script to load, got: %s", html)
+	}
+}

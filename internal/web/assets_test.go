@@ -68,6 +68,21 @@ func TestLoadAssetVersionsHashesEditorJSAndCSS(t *testing.T) {
 	}
 }
 
+func TestLoadAssetVersionsHashesTransposeJS(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "js"), 0755); err != nil {
+		t.Fatalf("making js dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "js", "transpose.js"), []byte("console.log(1)"), 0644); err != nil {
+		t.Fatalf("writing transpose.js fixture: %v", err)
+	}
+
+	v := LoadAssetVersions(dir)
+	if v.TransposeJS == "" {
+		t.Error("LoadAssetVersions().TransposeJS is empty, want a hash")
+	}
+}
+
 func TestVersionedHrefAppendsVersionQueryParam(t *testing.T) {
 	got := versionedHref("/static/css/style.css", "abc123")
 	want := "/static/css/style.css?v=abc123"

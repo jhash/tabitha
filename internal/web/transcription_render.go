@@ -167,3 +167,35 @@ func lyricWordNode(w chordWord) g.Node {
 	}
 	return node
 }
+
+// transposeControlsNode renders the on-the-fly chord-transposition
+// control: a semitone +/- stepper plus a live key readout, wired up by
+// static/js/transpose.js against this page's .chord spans. It's a pure
+// client-side string rewrite over already-rendered DOM — no server
+// round-trip — so it works the same online or from the offline cache
+// (see static/js/offline-db.js). key is the song's stored/detected key
+// (may be ""), used only to seed the starting spelling; shown as a plain
+// semitone offset instead when unknown.
+func transposeControlsNode(key string) g.Node {
+	return Div(Class("transpose-controls"), g.Attr("data-key", key),
+		Button(Class("transpose-down"), Type("button"), g.Attr("aria-label", "Transpose down a semitone"), g.Text("−")),
+		Span(Class("transpose-key"), g.Text(transposeKeyPlaceholder(key))),
+		Button(Class("transpose-up"), Type("button"), g.Attr("aria-label", "Transpose up a semitone"), g.Text("+")),
+	)
+}
+
+func transposeKeyPlaceholder(key string) string {
+	if key == "" {
+		return "0"
+	}
+	return key
+}
+
+// transposeScript loads static/js/transpose.js as a classic (non-module)
+// script — deliberately not type="module", since it's embedded directly
+// in boosted page content and needs to re-run on every htmx-boosted
+// navigation between songs (see the file's own doc comment for why a
+// module wouldn't).
+func transposeScript() g.Node {
+	return Script(Src(versionedHref("/static/js/transpose.js", assets.TransposeJS)))
+}
