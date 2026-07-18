@@ -22,6 +22,8 @@ type AssetVersions struct {
 	EditorCSS    string
 	PlayJS       string
 	PlayCSS      string
+	OfflineDB    string
+	OfflineSync  string
 }
 
 // assets holds the process-wide asset versions, set once by NewRouter
@@ -62,6 +64,8 @@ func LoadAssetVersions(dir string) AssetVersions {
 		EditorCSS:    loadAssetVersion(dir + "/css/editor.css"),
 		PlayJS:       loadAssetVersion(dir + "/js/play.js"),
 		PlayCSS:      loadAssetVersion(dir + "/css/play.css"),
+		OfflineDB:    loadAssetVersion(dir + "/js/offline-db.js"),
+		OfflineSync:  loadAssetVersion(dir + "/js/offline-sync.js"),
 	}
 }
 

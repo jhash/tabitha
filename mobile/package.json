@@ -1,0 +1,17 @@
+{
+  "name": "tabitha-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Minimal Capacitor wrapper that points the iOS/Android app shell at the live tabitha site — no bundled web app, no build step, just native chrome.",
+  "scripts": {
+    "sync": "cap sync"
+  },
+  "dependencies": {
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/ios": "^8.4.2",
+    "@capacitor/android": "^8.4.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.4.2"
+  }
+}

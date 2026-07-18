@@ -462,6 +462,78 @@ func (q *Queries) ListSongsByTitle(ctx context.Context) ([]ListSongsByTitleRow, 
 	return items, nil
 }
 
+const listSongsForOfflineSnapshot = `-- name: ListSongsForOfflineSnapshot :many
+SELECT songs.id, songs.title, songs.artist, songs.genre, songs.film_show_album, songs.decade, songs.bob_tag, songs.status, songs.source_url, songs.notes, songs.transpose_hint, songs.google_doc_id, songs.current_version_id, songs.added_by_user_id, songs.created_at, songs.updated_at, songs.artist_id, songs.preferred_key, songs.doc_created_at, songs.doc_modified_at, songs.source_site, songs.slug, transcription_versions.id, transcription_versions.song_id, transcription_versions.kind, transcription_versions.source, transcription_versions.raw_text, transcription_versions.content, transcription_versions.key, transcription_versions.capo, transcription_versions.is_current, transcription_versions.created_by, transcription_versions.created_at
+FROM songs
+JOIN transcription_versions ON transcription_versions.id = songs.current_version_id
+WHERE songs.current_version_id IS NOT NULL AND songs.slug <> ''
+ORDER BY songs.slug
+`
+
+type ListSongsForOfflineSnapshotRow struct {
+	Song                 Song                 `json:"song"`
+	TranscriptionVersion TranscriptionVersion `json:"transcription_version"`
+}
+
+// Every song that actually has something to show offline (a digested
+// transcription) — feeds the background SQLite export so the PWA can
+// render a song's chord chart offline even if it was never visited while
+// online. Undigested songs have nothing to render, so they're excluded
+// the same way the home page hides them by default.
+func (q *Queries) ListSongsForOfflineSnapshot(ctx context.Context) ([]ListSongsForOfflineSnapshotRow, error) {
+	rows, err := q.db.Query(ctx, listSongsForOfflineSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSongsForOfflineSnapshotRow
+	for rows.Next() {
+		var i ListSongsForOfflineSnapshotRow
+		if err := rows.Scan(
+			&i.Song.ID,
+			&i.Song.Title,
+			&i.Song.Artist,
+			&i.Song.Genre,
+			&i.Song.FilmShowAlbum,
+			&i.Song.Decade,
+			&i.Song.BobTag,
+			&i.Song.Status,
+			&i.Song.SourceUrl,
+			&i.Song.Notes,
+			&i.Song.TransposeHint,
+			&i.Song.GoogleDocID,
+			&i.Song.CurrentVersionID,
+			&i.Song.AddedByUserID,
+			&i.Song.CreatedAt,
+			&i.Song.UpdatedAt,
+			&i.Song.ArtistID,
+			&i.Song.PreferredKey,
+			&i.Song.DocCreatedAt,
+			&i.Song.DocModifiedAt,
+			&i.Song.SourceSite,
+			&i.Song.Slug,
+			&i.TranscriptionVersion.ID,
+			&i.TranscriptionVersion.SongID,
+			&i.TranscriptionVersion.Kind,
+			&i.TranscriptionVersion.Source,
+			&i.TranscriptionVersion.RawText,
+			&i.TranscriptionVersion.Content,
+			&i.TranscriptionVersion.Key,
+			&i.TranscriptionVersion.Capo,
+			&i.TranscriptionVersion.IsCurrent,
+			&i.TranscriptionVersion.CreatedBy,
+			&i.TranscriptionVersion.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setSongCurrentVersion = `-- name: SetSongCurrentVersion :exec
 UPDATE songs SET current_version_id = $2, updated_at = now() WHERE id = $1
 `

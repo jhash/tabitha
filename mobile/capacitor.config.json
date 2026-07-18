@@ -1,0 +1,9 @@
+{
+  "appId": "com.jakehash.tabitha",
+  "appName": "tabitha",
+  "webDir": "www",
+  "server": {
+    "url": "https://tabitha.jakehash.com",
+    "cleartext": false
+  }
+}
