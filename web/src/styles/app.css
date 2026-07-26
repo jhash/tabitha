@@ -1,0 +1,284 @@
+/* Self-hosted Lora, variable font (covers regular through bold in one file,
+   another for italic through bold-italic) — no Google Fonts CDN request, no
+   FOUT: font-display: optional means the browser either has the font in
+   time for first paint or falls through to the fallback stack for that
+   render entirely, swapping in next time it's cached. WOFF2 only (~85KB vs.
+   ~210KB as raw TTF) — universally supported, no fallback format needed. */
+@font-face {
+  font-family: "Lora";
+  src: url("/static/fonts/Lora-Variable.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: optional;
+}
+
+@font-face {
+  font-family: "Lora";
+  src: url("/static/fonts/Lora-Italic-Variable.woff2") format("woff2-variations");
+  font-weight: 400 700;
+  font-style: italic;
+  font-display: optional;
+}
+
+:root {
+  --color-fg: #111;
+  --color-bg: #fff;
+  --color-border: #ccc;
+  --color-muted: #666;
+  --content-max-width: 42rem;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-heading: "Lora", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-fg);
+  background: var(--color-bg);
+  line-height: 1.6;
+  font-size: 1.125rem;
+}
+
+h1, h2, h3, .site-title {
+  font-family: var(--font-heading);
+}
+
+a {
+  color: var(--color-fg);
+}
+
+a:hover {
+  color: var(--color-muted);
+}
+
+.site-header {
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Same max-width/centering as .layout, so "tabitha" lines up with the
+   page content's left edge instead of sitting flush against the
+   viewport. */
+.site-header-inner {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Widens alongside .layout-wide/.container-wide on the home page so the
+   header stays aligned with the wide table below it. */
+.site-header-inner.container-wide {
+  max-width: 100%;
+}
+
+.site-header .site-title {
+  font-weight: 700;
+  text-decoration: none;
+  font-size: 1.25rem;
+}
+
+.site-header .site-admin-link {
+  font-size: 0.9rem;
+}
+
+.site-header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* Populated by static/js/offline-sync.js — hidden (via the `hidden`
+   attribute set server-side) except in an installed PWA or the Capacitor
+   wrapper, where it shows live "x/total downloaded" progress. */
+.offline-status {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.offline-status.is-syncing {
+  animation: offline-status-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes offline-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 2rem;
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
+/* Wide pages (the home page's songs table) use as much of the window as
+   there is, rather than capping at .layout's normal 64rem — long titles
+   and header labels get room instead of wrapping/overflowing. */
+.layout.layout-wide {
+  max-width: 100%;
+}
+
+.sidebar {
+  flex: 0 0 12rem;
+}
+
+main.container {
+  flex: 1 1 auto;
+  max-width: var(--content-max-width);
+  min-width: 0;
+}
+
+main.container.container-wide {
+  max-width: none;
+}
+
+/* Public pages with no sidebar just center the readable column. */
+.layout.no-sidebar {
+  justify-content: center;
+}
+
+.songs-header-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.songs-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0.75rem 0;
+}
+
+.new-song-button {
+  display: inline-block;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.new-song-button:hover {
+  background: var(--color-border);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.75rem 0.4rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+th {
+  white-space: nowrap;
+}
+
+/* Not-yet-digested songs — grayed out until a transcription exists. */
+tr.no-version {
+  color: var(--color-muted);
+}
+
+tr.no-version a {
+  color: var(--color-muted);
+}
+
+th a {
+  text-decoration: none;
+}
+
+/* Chord-over-lyric transcription: each chord-word is a wrappable flex
+   item (chord stacked above its one lyric word), not a monospace grid —
+   this is what lets a chord chart reflow readably on narrow screens
+   instead of forcing horizontal scroll. See internal/web/transcription_render.go. */
+.transcription {
+  font-size: 0.95rem;
+}
+
+.section-header {
+  font-weight: 700;
+  margin-top: 1.5rem;
+}
+
+.text-line {
+  min-height: 1.3em;
+}
+
+.chord-line {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 0.5em;
+  row-gap: 0.2em;
+  margin: 0.1em 0;
+  align-items: flex-end;
+}
+
+.chord-word {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.3;
+}
+
+.chord-word .chord {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.85em;
+  color: var(--color-muted);
+  min-height: 1.1em;
+}
+
+.annotation {
+  color: var(--color-muted);
+  margin-left: 0.5em;
+}
+
+/* Transpose stepper (static/js/transpose.js): a semitone +/- control plus
+   a live key readout, sitting above the transcription it rewrites. */
+.transpose-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.transpose-down,
+.transpose-up {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.transpose-down:hover,
+.transpose-up:hover {
+  background: var(--color-border);
+}
+
+.transpose-key {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  min-width: 2ch;
+  text-align: center;
+}

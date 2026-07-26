@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.output/
+.wrangler/
+
+# Local secrets and origin overrides for `vite dev` / `wrangler dev`.
+.dev.vars
+
+# Note: worker-configuration.d.ts (wrangler types) and src/routeTree.gen.ts
+# (TanStack Router) ARE committed even though both are generated —
+# `npm run typecheck` needs them, and ignoring them makes a fresh clone
+# fail before the first build has had a chance to produce them.

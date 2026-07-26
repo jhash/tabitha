@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tabitha-web",
+  // TanStack Start ships its own Worker entry — we never hand-write a
+  // fetch handler. Server functions and SSR both route through it.
+  "main": "@tanstack/react-start/server-entry",
+  "compatibility_date": "2026-07-01",
+  // nodejs_compat is what lets React 19's server renderer and our deps
+  // reach `node:stream`/`node:async_hooks` shims inside workerd. It does
+  // NOT make `node:fs` work — filesystem access is still absent, by
+  // design (see the SSR-environment note in vite.config.ts).
+  "compatibility_flags": ["nodejs_compat"],
+
+  "observability": { "enabled": true },
+
+  "assets": {
+    "directory": ".output/public",
+    // Static files win over the Worker, but unmatched paths must still
+    // reach SSR rather than 404 at the asset layer.
+    "not_found_handling": "none",
+    "run_worker_first": false
+  },
+
+  "kv_namespaces": [
+    {
+      // Read-through cache for song payloads. Unlike `caches.default`
+      // (per-colo), KV is global — a song digested once is warm for every
+      // edge location, which matters for a catalog whose long tail is
+      // read far less often than the cache TTL.
+      "binding": "SONG_CACHE",
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
+      "preview_id": "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+    }
+  ],
+
+  "vars": {
+    // Base URL of the existing Go service, which stays the system of
+    // record (Postgres + River + Google OAuth). See docs for why the data
+    // layer does not move into the Worker.
+    "ORIGIN_URL": "https://tabitha.jakehash.com",
+    "PUBLIC_APP_URL": "https://tabitha.jakehash.com"
+  }
+
+  // ORIGIN_TOKEN is a secret, not a var:
+  //   wrangler secret put ORIGIN_TOKEN
+}
