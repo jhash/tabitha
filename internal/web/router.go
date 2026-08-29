@@ -82,6 +82,8 @@ func NewRouter(cfg config.Config, q *db.Queries, jobClient *river.Client[pgx.Tx]
 		r.Post("/tools/toc-sync", AdminTriggerTocSyncHandler(jobClient))
 		r.Post("/tools/digest-song", AdminTriggerDigestSongHandler(q, jobClient))
 		r.Post("/tools/digest-batch", AdminTriggerDigestBatchHandler(q, jobClient))
+		r.Post("/tools/scrape-song", AdminTriggerScrapeSongHandler(q, jobClient))
+		r.Post("/tools/publish-song-doc", AdminTriggerPublishSongDocHandler(q, jobClient))
 	})
 
 	return r
