@@ -647,6 +647,22 @@ func (q *Queries) SetSongSlug(ctx context.Context, arg SetSongSlugParams) error 
 	return err
 }
 
+const setSongSourceURL = `-- name: SetSongSourceURL :exec
+UPDATE songs SET source_url = $2, updated_at = now() WHERE id = $1
+`
+
+type SetSongSourceURLParams struct {
+	ID        int64  `json:"id"`
+	SourceUrl string `json:"source_url"`
+}
+
+// Backfills source_url for a song that was created without one (e.g.
+// manually via /songs/new) and then scraped by URL directly.
+func (q *Queries) SetSongSourceURL(ctx context.Context, arg SetSongSourceURLParams) error {
+	_, err := q.db.Exec(ctx, setSongSourceURL, arg.ID, arg.SourceUrl)
+	return err
+}
+
 const setSongStatus = `-- name: SetSongStatus :exec
 UPDATE songs SET status = $2, updated_at = now() WHERE id = $1
 `
