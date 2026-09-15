@@ -26,13 +26,15 @@ jobs:
           curl -fsSL https://github.com/moby/buildkit/releases/download/v0.33.0/buildkit-v0.33.0.linux-${{ matrix.arch }}.tar.gz | tar -xz -C /tmp bin/buildctl
           install -m 0755 /tmp/bin/buildctl "$RUNNER_TEMP/buildctl"
       - name: Registry auth
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           auth=$(printf '%s:%s' '${{ github.actor }}' "$GH_TOKEN" | base64 | tr -d '\n')
           mkdir -p "$RUNNER_TEMP/docker"
           printf '{"auths":{"ghcr.io":{"auth":"%s"}}}' "$auth" > "$RUNNER_TEMP/docker/config.json"
       - name: Native build and push
-        env: { DOCKER_CONFIG: ${{ runner.temp }}/docker }
+        env:
+          DOCKER_CONFIG: ${{ runner.temp }}/docker
         run: |
           set -euo pipefail
           "$RUNNER_TEMP/buildctl" --addr "${{ matrix.buildkit }}" build --frontend dockerfile.v0 --local context=. --local dockerfile=. \
@@ -46,7 +48,8 @@ jobs:
       - name: Install crane
         run: curl -fsSL https://github.com/google/go-containerregistry/releases/download/v0.20.6/go-containerregistry_Linux_x86_64.tar.gz | tar -xz -C "$RUNNER_TEMP" crane
       - name: Publish manifest
-        env: { GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           auth=$(printf '%s:%s' '${{ github.actor }}' "$GH_TOKEN" | base64 | tr -d '\n')
