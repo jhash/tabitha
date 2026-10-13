@@ -301,3 +301,111 @@ func readFixture(t *testing.T, name string) string {
 	}
 	return string(data)
 }
+
+// chordsOf collects a block's chord-row tokens in order.
+func chordsOf(b Block) []string {
+	var chords []string
+	for _, tok := range b.Tokens {
+		if tok.Chord != "" {
+			chords = append(chords, tok.Chord)
+		}
+	}
+	return chords
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestParseInstrumentalChorusChordLines(t *testing.T) {
+	// Real section from "(I've Had) The Time of My Life": single-chord lines,
+	// a line opening and closing with dash separators, a bare slash-bass
+	// chord ("/B"), and a parenthesized chord pair. Every line is chords,
+	// so every line must be highlighted as one.
+	input := "INSTRUMENTAL CHORUS:\n" +
+		"E\n" +
+		"C#m7\n" +
+		"D\n" +
+		"- E  C#m7  D  /B  -\n" +
+		"F/D\n" +
+		"G/D\n" +
+		"Am/D\n" +
+		"Bm/D\n" +
+		"(C/D D)\n"
+	blocks := Parse(input)
+	if blocks[0].Kind != SectionHeader {
+		t.Fatalf("blocks[0].Kind = %v, want SectionHeader", blocks[0].Kind)
+	}
+	for i, b := range blocks[1:10] {
+		if b.Kind != ChordOnlyLine {
+			t.Errorf("line %d: Kind = %v, want ChordOnlyLine", i+2, b.Kind)
+		}
+		if b.Annotation != "" {
+			t.Errorf("line %d: Annotation = %q, want none (all chords)", i+2, b.Annotation)
+		}
+	}
+	if got, want := chordsOf(blocks[4]), []string{"-", "E", "C#m7", "D", "/B", "-"}; !equalStrings(got, want) {
+		t.Errorf("dash line chords = %q, want %q", got, want)
+	}
+	if got := Render(blocks); got != input {
+		t.Errorf("Render() = %q, want %q", got, input)
+	}
+}
+
+func TestParseChordLineAcceptsAnyPunctuationSeparator(t *testing.T) {
+	// Separator detection is shape-based (no letters or digits), not a
+	// whitelist of specific characters.
+	for _, input := range []string{
+		"E – A — D",
+		"E ~ A ~ D",
+		"... E  A ...",
+		"E / A // D",
+		"• E • A •",
+		"|   E   /D | x3",
+	} {
+		blocks := Parse(input)
+		if blocks[0].Kind != ChordOnlyLine || blocks[0].Annotation != "" {
+			t.Errorf("Parse(%q) = %+v, want ChordOnlyLine with no annotation", input, blocks[0])
+		}
+		if got := Render(blocks); got != input {
+			t.Errorf("Render(Parse(%q)) = %q", input, got)
+		}
+	}
+}
+
+func TestParseSingleChordLinePairsWithLyric(t *testing.T) {
+	input := "        E\nDoor til I found the truth\n"
+	blocks := Parse(input)
+	if blocks[0].Kind != ChordLyricPair {
+		t.Fatalf("Kind = %v, want ChordLyricPair", blocks[0].Kind)
+	}
+	if got := Render(blocks); got != input {
+		t.Errorf("Render() = %q, want %q", got, input)
+	}
+}
+
+func TestParseNonChordLinesStayTextLines(t *testing.T) {
+	// Fillers alone, lone repeat counts, free-text parentheticals, and
+	// lyrics wrapped in punctuation must not be mistaken for chord rows.
+	for _, input := range []string{
+		"---",
+		"- - -",
+		"x2",
+		"(drums)",
+		"(CHORUS 1) soft chords   (CHORUS 1)   (CHORUS 2)",
+		"- Door til I found the truth -",
+		"E is for everyone",
+	} {
+		if blocks := Parse(input); blocks[0].Kind != TextLine {
+			t.Errorf("Parse(%q).Kind = %v, want TextLine", input, blocks[0].Kind)
+		}
+	}
+}

@@ -3,6 +3,7 @@ package transcription
 import (
 	"regexp"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -23,16 +24,18 @@ var parenChordGroupContentRe = regexp.MustCompile(`^[A-Ga-g0-9#/ x∆Δ-]*$`)
 
 // chordTokenRe matches anything that can sit in a "chord row": real chord
 // symbols (root + accidental + quality + extension + slash bass), bare
-// lowercase note letters (bass-walk notation), repeat counts ("x2"), bar
-// delimiters ("|"), and arbitrary parenthesized annotations ("(drums)",
-// "(E6)"). It's deliberately loose — a heuristic for "what Jeff put in the
-// chord row", not a music-theory validator.
+// slash-bass chords ("/B" — keep the previous chord, change the bass), bare
+// lowercase note letters (bass-walk notation), repeat counts ("x2"), and
+// arbitrary parenthesized annotations ("(drums)", "(E6)"). Punctuation-only
+// separators like "|" or "-" are handled separately (see isFillerToken).
+// It's deliberately loose — a heuristic for "what Jeff put in the chord
+// row", not a music-theory validator.
 // The quality group includes bare "m" (found across 1410 real
 // transcription versions — "Bm", "Em", "Am"... the standard shorthand for
 // minor, distinct from the full word "min") and ∆/Δ (U+2206 INCREMENT and
 // U+0394 GREEK CAPITAL LETTER DELTA — Jeff uses both interchangeably) as
 // shorthand for "major7", alongside the usual text qualities.
-var chordTokenRe = regexp.MustCompile(`(?i)^(\([^)]*\)|x[0-9]+|\||[a-g](#|b)?(maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9|m|∆|Δ)?[0-9]{0,2}(/[a-g](#|b)?)?)$`)
+var chordTokenRe = regexp.MustCompile(`(?i)^(\([^)]*\)|x[0-9]+|/[a-g](#|b)?|[a-g](#|b)?(maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9|m|∆|Δ)?[0-9]{0,2}(/[a-g](#|b)?)?)$`)
 
 // word is a whitespace-delimited token from a line, with its rune (not
 // byte) start column — required for correct alignment when the source
@@ -87,22 +90,82 @@ func matchingParenChordGroup(line []rune, open int) (end int, ok bool) {
 	return 0, false
 }
 
-func isChordLineCandidate(line string) bool {
-	words := tokenizeWords([]rune(line))
-	if len(words) < 2 {
-		return false
+// isFillerToken reports whether a word has no letters or digits at all —
+// bar lines ("|"), dashes ("-", "–", "—"), slashes, dots, tildes, and so
+// on. Jeff uses whatever separator suits the song between chords
+// ("- E  C#m7  D  /B  -"), so rather than whitelisting specific characters,
+// any punctuation-only word is allowed to sit in a chord row. Fillers never
+// count toward deciding that a line IS a chord row, though — a line of only
+// dashes stays a TextLine.
+func isFillerToken(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return false
+		}
 	}
-	return chordTokenRe.MatchString(words[0].text) && chordTokenRe.MatchString(words[1].text)
+	return true
 }
 
-// splitChordRun consumes leading chord-shaped words and reports the rune
-// column where consumption stopped (end of the last consumed word, or 0 if
-// none). Everything from that column to end-of-line — including whatever
+// isChordRowToken reports whether a word can be part of a chord row's
+// leading run: a chord-shaped token or a punctuation-only filler.
+func isChordRowToken(s string) bool {
+	return chordTokenRe.MatchString(s) || isFillerToken(s)
+}
+
+// isStandaloneChord is the stricter check for a line holding exactly one
+// chord ("E", "C#m7", "(C/D D)"): a real chord symbol or a chord-shaped
+// paren group — never a repeat count ("x2") or a free-text parenthetical
+// ("(CHORUS)", "(drums)"), which on their own line are directions, not
+// chords.
+func isStandaloneChord(s string) bool {
+	if len(s) >= 2 && strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") {
+		inner := strings.Fields(s[1 : len(s)-1])
+		found := false
+		for _, w := range inner {
+			if isFillerToken(w) {
+				continue
+			}
+			if !isStandaloneChord(w) || strings.HasPrefix(w, "(") {
+				return false
+			}
+			found = true
+		}
+		return found
+	}
+	return chordTokenRe.MatchString(s) && !strings.HasPrefix(strings.ToLower(s), "x")
+}
+
+// isChordLineCandidate decides whether a line is a chord row, based on the
+// shape of its tokens rather than any specific separator character: the
+// line's leading run of chord-row tokens (chords plus punctuation fillers,
+// see isFillerToken) must hold at least two chords — anything after that
+// run becomes the block's Annotation — or the whole line must be a single
+// standalone chord surrounded only by fillers (see isStandaloneChord).
+func isChordLineCandidate(line string) bool {
+	words := tokenizeWords([]rune(line))
+	var chords []string
+	i := 0
+	for ; i < len(words) && isChordRowToken(words[i].text); i++ {
+		if !isFillerToken(words[i].text) {
+			chords = append(chords, words[i].text)
+		}
+	}
+	if len(chords) >= 2 {
+		return true
+	}
+	return len(chords) == 1 && i == len(words) && isStandaloneChord(chords[0])
+}
+
+// splitChordRun consumes leading chord-row words (chords and punctuation
+// fillers alike — a filler like "|" or "-" is kept as its own chord-row
+// token so its column round-trips) and reports the rune column where
+// consumption stopped (end of the last consumed word, or 0 if none).
+// Everything from that column to end-of-line — including whatever
 // whitespace separates it from the last real chord — becomes the block's
 // Annotation, captured verbatim so it round-trips without extra padding math.
 func splitChordRun(words []word) (chordWords []word, consumedEndCol int) {
 	for _, w := range words {
-		if !chordTokenRe.MatchString(w.text) {
+		if !isChordRowToken(w.text) {
 			break
 		}
 		chordWords = append(chordWords, w)

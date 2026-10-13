@@ -40,14 +40,11 @@
   var FLAT_MINOR_PCS = { 0: true, 2: true, 3: true, 5: true, 7: true, 10: true };
 
   // Matches a bare chord: root, optional accidental, optional
-  // quality/extension text, optional /bass — the same shape as
+  // quality/extension text, optional /bass — or a bare slash-bass chord
+  // like "/B" with no root at all — the same shape as
   // internal/transcription/parser.go's chordTokenRe, minus the
-  // x-count/bar/paren alternatives (handled separately below).
-  var CHORD_RE = /^([A-Ga-g])(#|b)?((?:maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9|m|∆|Δ)?[0-9]{0,2})(?:\/([A-Ga-g])(#|b)?)?$/i;
-
-  // A bare note inside a parenthesized chord group, e.g. the "/F" and "G"
-  // in "(/F /F /F#  G)" — optionally slash-prefixed, no quality.
-  var PAREN_NOTE_RE = /^(\/?)([A-Ga-g])(#|b)?$/i;
+  // x-count/paren alternatives (handled separately below).
+  var CHORD_RE = /^(?:([A-Ga-g])(#|b)?((?:maj|min|dim|aug|sus2|sus4|sus|add2|add4|add6|add9|m|∆|Δ)?[0-9]{0,2}))?(?:\/([A-Ga-g])(#|b)?)?$/i;
 
   function parseNote(letter, accidental) {
     return NOTE_TO_PC[letter.toUpperCase() + (accidental || "")];
@@ -70,15 +67,14 @@
       .slice(1, -1)
       .split(" ")
       .map(function (w) {
-        var m = PAREN_NOTE_RE.exec(w);
-        return m ? m[1] + transposeNote(m[2], m[3], semitones, useFlats) : w;
+        return transposeChordToken(w, semitones, useFlats);
       });
     return "(" + words.join(" ") + ")";
   }
 
   // transposeChordToken shifts one chord-row token by `semitones`,
-  // preserving repeat markers ("x4"), bar delimiters ("|"), and
-  // non-chord parenthetical annotations ("(drums)") untouched.
+  // preserving repeat markers ("x4"), punctuation fillers ("|", "-"),
+  // and non-chord parenthetical annotations ("(drums)") untouched.
   function transposeChordToken(token, semitones, useFlats) {
     if (token === "" || token === "|" || /^x[0-9]+$/i.test(token)) return token;
     if (token.charAt(0) === "(" && token.charAt(token.length - 1) === ")") {
@@ -86,9 +82,9 @@
     }
     var m = CHORD_RE.exec(token);
     if (!m) return token;
-    var root = transposeNote(m[1], m[2], semitones, useFlats);
+    var root = m[1] ? transposeNote(m[1], m[2], semitones, useFlats) + (m[3] || "") : "";
     var bass = m[4] ? "/" + transposeNote(m[4], m[5], semitones, useFlats) : "";
-    return root + (m[3] || "") + bass;
+    return root + bass;
   }
 
   // parseKey reads a plain key string like "Bb" or "F#m" into a tonic
