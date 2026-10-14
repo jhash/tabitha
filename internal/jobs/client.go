@@ -49,6 +49,8 @@ func NewClient(pool *pgxpool.Pool, queries *db.Queries, cfg config.Config, encry
 	workers := river.NewWorkers()
 	river.AddWorker(workers, &TocSyncWorker{Queries: queries, AppURL: cfg.AppURL, Cloudflare: cfClient})
 	river.AddWorker(workers, &DigestSongWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey, RateLimiter: rateLimiter, Cloudflare: cfClient})
+	river.AddWorker(workers, &ScrapeSongWorker{Queries: queries, Config: cfg, Cloudflare: cfClient})
+	river.AddWorker(workers, &PublishSongDocWorker{Queries: queries, Config: cfg, EncryptionKey: encryptionKey, RateLimiter: rateLimiter})
 
 	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 		Queues: map[string]river.QueueConfig{
@@ -73,6 +75,22 @@ func EnqueueTocSync(ctx context.Context, client *river.Client[pgx.Tx]) error {
 // /admin/tools' "digest by title" trigger.
 func EnqueueDigestSong(ctx context.Context, client *river.Client[pgx.Tx], songID int64) error {
 	_, err := client.Insert(ctx, DigestSongArgs{SongID: songID}, nil)
+	return err
+}
+
+// EnqueueScrapeSong inserts a scrape_song job for one song. rawURL
+// overrides the song's own source_url when non-empty. Used by
+// /admin/tools' "scrape by URL" trigger.
+func EnqueueScrapeSong(ctx context.Context, client *river.Client[pgx.Tx], songID int64, rawURL string) error {
+	_, err := client.Insert(ctx, ScrapeSongArgs{SongID: songID, URL: rawURL}, nil)
+	return err
+}
+
+// EnqueuePublishSongDoc inserts a publish_song_doc job for one song. Used
+// by /admin/tools' "publish to Google Doc" trigger — the "up to a new
+// Google Doc" side of the two-way sync (digest_song is the "down" side).
+func EnqueuePublishSongDoc(ctx context.Context, client *river.Client[pgx.Tx], songID int64) error {
+	_, err := client.Insert(ctx, PublishSongDocArgs{SongID: songID}, nil)
 	return err
 }
 

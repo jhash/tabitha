@@ -70,12 +70,24 @@ func storeGoogleToken(ctx context.Context, q *db.Queries, encryptionKey []byte, 
 	})
 }
 
-// GoogleDriveReadonlyScope is the only Drive/Docs scope tabitha ever
-// requests for Jeff's docs — read-only, never write. goth.User has no
-// field carrying the granted scope back from Google, so this records the
-// fixed set tabitha always asks for at the authorization URL.
+// GoogleDriveReadonlyScope is the Drive/Docs scope tabitha requests for
+// reading Jeff's pre-existing docs — read-only, and stays that way:
+// nothing in tabitha ever writes to a doc it didn't create itself. goth.User
+// has no field carrying the granted scope back from Google, so this
+// records the fixed set tabitha always asks for at the authorization URL.
+// See GoogleDriveFileScope for the (separate, deliberately narrower)
+// capability that does write.
 const GoogleDriveReadonlyScope = "https://www.googleapis.com/auth/drive.readonly"
+
+// GoogleDriveFileScope is a per-file scope: it only grants access to
+// files tabitha itself creates via the Drive API (e.g. a new Google Doc
+// published from a scraped Ultimate Guitar/e-chords chart), never to
+// Jeff's existing docs or anything else already in a user's Drive. This
+// is what makes "publish a scraped song to a new Google Doc, then sync
+// edits back" (see internal/jobs/publish_song_doc.go) safe to add
+// without weakening the read-only guarantee above for every other doc.
+const GoogleDriveFileScope = "https://www.googleapis.com/auth/drive.file"
 
 // GoogleOAuthScope is the full space-separated scope string requested for
 // every Google login.
-const GoogleOAuthScope = "email profile " + GoogleDriveReadonlyScope
+const GoogleOAuthScope = "email profile " + GoogleDriveReadonlyScope + " " + GoogleDriveFileScope
