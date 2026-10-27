@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
+	"unicode"
 
 	g "maragu.dev/gomponents"
 	. "maragu.dev/gomponents/html"
@@ -30,6 +32,7 @@ type SongRow struct {
 	DocCreatedAt  *time.Time
 	DocModifiedAt *time.Time
 	Slug          string
+	LastPlayedAt  *time.Time
 }
 
 // effectiveAddedAt/effectiveUpdatedAt prefer the Google Doc's own
@@ -49,7 +52,7 @@ func effectiveUpdatedAt(s SongRow) time.Time {
 	return s.UpdatedAt
 }
 
-var sortColumns = []string{"title", "artist", "updated", "added", "status", "added_by"}
+var sortColumns = []string{"title", "artist", "updated", "added", "status", "added_by", "played"}
 
 func isValidSort(sort string) bool {
 	for _, c := range sortColumns {
@@ -268,6 +271,18 @@ func searchAndFilterForm(params SongQueryParams, statuses []string, addedByUsers
 }
 
 func homeTable(songs []SongRow, params SongQueryParams, statuses []string, viewerIsSuperadmin bool) g.Node {
+	var anchors map[string]int64
+	if azIndexApplies(params) {
+		anchors = letterAnchors(songs)
+	}
+	now := time.Now()
+	return g.Group{
+		Div(Class("songs-table-scroll"), songsTable(songs, params, statuses, viewerIsSuperadmin, anchors, now)),
+		azIndexNav(anchors),
+	}
+}
+
+func songsTable(songs []SongRow, params SongQueryParams, statuses []string, viewerIsSuperadmin bool, anchors map[string]int64, now time.Time) g.Node {
 	return Table(
 		THead(
 			Tr(
@@ -278,12 +293,15 @@ func homeTable(songs []SongRow, params SongQueryParams, statuses []string, viewe
 				sortHeader("Last Updated", "updated", params),
 				sortHeader("Added", "added", params),
 				sortHeader("Added By", "added_by", params),
+				sortHeader("Last Played", "played", params),
 			),
 		),
 		TBody(
 			g.Map(songs, func(s SongRow) g.Node {
+				letter := indexLetter(s.Title)
 				return Tr(
 					g.If(!s.HasVersion, Class("no-version")),
+					g.If(anchors[letter] == s.ID, ID(azAnchorID(letter))),
 					g.If(viewerIsSuperadmin, Td(Input(Type("checkbox"), Name("ids"), Value(fmt.Sprintf("%d", s.ID))))),
 					Td(A(Href(songHref(s)), g.Text(s.Title))),
 					Td(g.Text(s.Artist)),
@@ -291,6 +309,7 @@ func homeTable(songs []SongRow, params SongQueryParams, statuses []string, viewe
 					Td(g.Text(formatDate(effectiveUpdatedAt(s)))),
 					Td(g.Text(formatDate(effectiveAddedAt(s)))),
 					Td(g.Text(addedByLabel(s))),
+					lastPlayedCell(s, now),
 				)
 			}),
 		),
@@ -355,4 +374,91 @@ func sortHeader(label, column string, params SongQueryParams) g.Node {
 		g.Text(label),
 		g.Text(arrow),
 	))
+}
+
+func lastPlayedCell(s SongRow, now time.Time) g.Node {
+	if s.LastPlayedAt == nil {
+		return Td()
+	}
+	return Td(Time(
+		DateTime(s.LastPlayedAt.UTC().Format(time.RFC3339)),
+		Title(s.LastPlayedAt.Format("2006-01-02 15:04")),
+		g.Text(timeAgo(*s.LastPlayedAt, now)),
+	))
+}
+
+func timeAgo(t, now time.Time) string {
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	case d < 30*24*time.Hour:
+		return fmt.Sprintf("%dw ago", int(d.Hours()/(24*7)))
+	case d < 365*24*time.Hour:
+		return fmt.Sprintf("%dmo ago", int(d.Hours()/(24*30)))
+	default:
+		return fmt.Sprintf("%dy ago", int(d.Hours()/(24*365)))
+	}
+}
+
+var azLetters = strings.Split("#ABCDEFGHIJKLMNOPQRSTUVWXYZ", "")
+
+func azIndexApplies(p SongQueryParams) bool {
+	return effectiveSort(p) == "title"
+}
+
+// indexLetter skips leading punctuation so "(I Can't Get No) Satisfaction" files under I, matching Postgres's default collation order.
+func indexLetter(title string) string {
+	for _, r := range title {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			continue
+		}
+		upper := unicode.ToUpper(r)
+		if upper >= 'A' && upper <= 'Z' {
+			return string(upper)
+		}
+		return "#"
+	}
+	return "#"
+}
+
+func letterAnchors(songs []SongRow) map[string]int64 {
+	anchors := map[string]int64{}
+	for _, s := range songs {
+		letter := indexLetter(s.Title)
+		if _, seen := anchors[letter]; !seen {
+			anchors[letter] = s.ID
+		}
+	}
+	return anchors
+}
+
+func azAnchorID(letter string) string {
+	if letter == "#" {
+		return "az-num"
+	}
+	return "az-" + letter
+}
+
+func azIndexNav(anchors map[string]int64) g.Node {
+	if len(anchors) == 0 {
+		return nil
+	}
+	return g.Group{
+		Nav(Class("az-index"), g.Attr("aria-label", "Jump to letter"),
+			g.Map(azLetters, func(letter string) g.Node {
+				if _, ok := anchors[letter]; !ok {
+					return Span(Class("az-letter az-empty"), g.Attr("aria-hidden", "true"), g.Text(letter))
+				}
+				return A(Class("az-letter"), Href("#"+azAnchorID(letter)), g.Text(letter))
+			}),
+		),
+		Script(Src(versionedHref("/static/js/az-index.js", assets.AzIndexJS))),
+	}
 }
