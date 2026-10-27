@@ -83,6 +83,17 @@ func TestLoadAssetVersionsHashesTransposeJS(t *testing.T) {
 	}
 }
 
+func TestLoadAssetVersionsHashesIconSprite(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "icons.svg"), []byte("<svg/>"), 0644); err != nil {
+		t.Fatalf("writing icons.svg fixture: %v", err)
+	}
+
+	if v := LoadAssetVersions(dir); v.Icons == "" {
+		t.Error("LoadAssetVersions().Icons is empty, want a hash")
+	}
+}
+
 func TestVersionedHrefAppendsVersionQueryParam(t *testing.T) {
 	got := versionedHref("/static/css/style.css", "abc123")
 	want := "/static/css/style.css?v=abc123"

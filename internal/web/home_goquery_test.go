@@ -140,3 +140,76 @@ func TestHomeRouteRowCheckboxesOnlyRenderForSuperadmin(t *testing.T) {
 		t.Errorf("checkbox value = %q, want %q", val, strconv.FormatInt(song.ID, 10))
 	}
 }
+
+func TestHomeRouteStickyHeaderHoldsSearchFieldBoundToFilterForm(t *testing.T) {
+	q := setupTestQueries(t)
+	r := NewRouter(config.Config{}, q, nil)
+
+	doc := getDoc(t, r, httptest.NewRequest(http.MethodGet, "/?search=toto", nil))
+
+	header := doc.Find(".songs-header-row")
+	if header.Length() != 1 {
+		t.Fatalf("found %d .songs-header-row elements, want 1", header.Length())
+	}
+	search := header.Find(`.song-search-field input[type="search"][name="search"]`)
+	if search.Length() != 1 {
+		t.Fatalf("found %d search inputs in the sticky header, want 1", search.Length())
+	}
+	if val, _ := search.Attr("value"); val != "toto" {
+		t.Errorf("search input value = %q, want %q", val, "toto")
+	}
+	if label, _ := search.Attr("aria-label"); label != "Search songs" {
+		t.Errorf("search input aria-label = %q, want %q", label, "Search songs")
+	}
+
+	formID, _ := search.Attr("form")
+	form := doc.Find("form#" + formID)
+	if formID == "" || form.Length() != 1 {
+		t.Fatalf("search input form attr = %q, want it to name the one filter form", formID)
+	}
+	if n := doc.Find(`input[name="search"]`).Length(); n != 1 {
+		t.Errorf("found %d search inputs on the page, want only the sticky header's", n)
+	}
+	for _, name := range []string{"status", "added_by", "digested"} {
+		if form.Find(`select[name="`+name+`"]`).Length() != 1 {
+			t.Errorf("filter form is missing its %q select", name)
+		}
+	}
+	if trigger, _ := form.Attr("hx-trigger"); !strings.Contains(trigger, "keyup changed delay:300ms from:#song-search") {
+		t.Errorf("filter form hx-trigger = %q, want it to listen for keyup on #song-search", trigger)
+	}
+
+	href, _ := header.Find(".song-search-field svg use").Attr("href")
+	if !strings.HasPrefix(href, "/static/icons.svg") || !strings.HasSuffix(href, "#search-icon") {
+		t.Errorf("search icon href = %q, want the icons.svg sprite's #search-icon", href)
+	}
+}
+
+func TestHomeRouteStickyHeaderPlusButtonOnlyRendersForSuperadmin(t *testing.T) {
+	q := setupTestQueries(t)
+	r := NewRouter(config.Config{}, q, nil)
+
+	anonDoc := getDoc(t, r, httptest.NewRequest(http.MethodGet, "/", nil))
+	if n := anonDoc.Find(".songs-header-row .new-song-icon-button").Length(); n != 0 {
+		t.Errorf("anonymous viewer sees %d new-song buttons in the header, want 0", n)
+	}
+
+	token, _ := superadminSession(t, q)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	adminDoc := getDoc(t, r, req)
+
+	button := adminDoc.Find(".songs-header-row .new-song-icon-button")
+	if button.Length() != 1 {
+		t.Fatalf("superadmin sees %d new-song buttons in the header, want 1", button.Length())
+	}
+	if href, _ := button.Attr("href"); href != "/songs/new" {
+		t.Errorf("new-song button href = %q, want /songs/new", href)
+	}
+	if label, _ := button.Attr("aria-label"); label != "New song" {
+		t.Errorf("new-song button aria-label = %q, want %q", label, "New song")
+	}
+	if href, _ := button.Find("svg use").Attr("href"); !strings.HasSuffix(href, "#plus-icon") {
+		t.Errorf("new-song button icon href = %q, want the sprite's #plus-icon", href)
+	}
+}
