@@ -170,7 +170,8 @@ func homeContent(songs []SongRow, params SongQueryParams, statuses []string, add
 	return Div(
 		Div(Class("songs-header-row"),
 			H1(g.Text("Songs")),
-			g.If(viewerIsSuperadmin, newSongButton()),
+			songSearchField(params),
+			g.If(viewerIsSuperadmin, newSongIconButton()),
 		),
 		searchAndFilterForm(params, statuses, addedByUsers),
 		homeTable(songs, params, statuses, viewerIsSuperadmin),
@@ -183,11 +184,31 @@ func homeContent(songs []SongRow, params SongQueryParams, statuses []string, add
 	)
 }
 
-// newSongButton is the "+ Song" link shown inline with the "Songs" header
-// above the table and inline with the bulk-status bar below it, for
-// superadmins only.
+// newSongButton is the "+ Song" link inline with the bulk-status bar below the table, for superadmins only.
 func newSongButton() g.Node {
 	return A(Class("new-song-button"), Href("/songs/new"), g.Text("+ Song"))
+}
+
+func newSongIconButton() g.Node {
+	return A(Class("new-song-icon-button"), Href("/songs/new"), Aria("label", "New song"), Title("New song"),
+		spriteIcon("plus-icon"),
+	)
+}
+
+func spriteIcon(id string) g.Node {
+	return g.El("svg", Class("icon"), Aria("hidden", "true"), g.Attr("focusable", "false"),
+		g.El("use", Href(versionedHref("/static/icons.svg", assets.Icons)+"#"+id)),
+	)
+}
+
+// songSearchField lives in the sticky header, outside the filter form, so it joins that form via the form attribute.
+func songSearchField(params SongQueryParams) g.Node {
+	return Div(Class("song-search-field"),
+		spriteIcon("search-icon"),
+		Input(Type("search"), ID("song-search"), Name("search"), FormAttr(songSearchFormID), Value(params.Search),
+			Placeholder("Search title, artist, genre…"), Aria("label", "Search songs"),
+		),
+	)
 }
 
 // bulkStatusBar lets a superadmin set the status of every checked row at
@@ -214,11 +235,12 @@ func bulkStatusBar(statuses []string) g.Node {
 	)
 }
 
+const songSearchFormID = "song-search-form"
+
 func searchAndFilterForm(params SongQueryParams, statuses []string, addedByUsers []db.ListDistinctAddedByUsersRow) g.Node {
-	return FormEl(Method("get"), Action("/"),
+	return FormEl(ID(songSearchFormID), Class("song-filters"), Method("get"), Action("/"),
 		g.Attr("hx-get", "/"), g.Attr("hx-target", "body"), g.Attr("hx-push-url", "true"),
-		g.Attr("hx-trigger", "submit, change, keyup changed delay:300ms from:input[type=search]"),
-		Input(Type("search"), Name("search"), Value(params.Search), Placeholder("Search title, artist, genre…")),
+		g.Attr("hx-trigger", "submit, change, change from:#song-search, keyup changed delay:300ms from:#song-search"),
 		Select(Name("status"),
 			Option(Value(""), g.Text("Any status")),
 			g.Map(statuses, func(s string) g.Node {
