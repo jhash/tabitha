@@ -34,6 +34,7 @@ var sortColumnExprs = map[string]string{
 	"updated":  "updated_at",
 	"added":    "created_at",
 	"added_by": "lower(coalesce(added_by_name, added_by_email, ''))",
+	"played":   "last_played_at",
 }
 
 func isValidOrder(order string) bool {
@@ -82,7 +83,7 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 		if isValidOrder(p.Order) {
 			order = strings.ToUpper(p.Order)
 		}
-		orderBy = col + " " + order
+		orderBy = col + " " + order + " NULLS LAST"
 	}
 
 	query := fmt.Sprintf(`
@@ -93,16 +94,18 @@ func buildSongsQuery(p SongQueryParams) (string, []any) {
 				s.created_at, s.updated_at,
 				s.doc_created_at, s.doc_modified_at,
 				s.slug,
+				lp.played_at AS last_played_at,
 				(s.current_version_id IS NOT NULL) AS has_version,
 				coalesce(string_agg(DISTINCT g.name, ', '), '') AS genres
 			FROM songs s
 			LEFT JOIN users u ON u.id = s.added_by_user_id
+			LEFT JOIN song_last_played lp ON lp.song_id = s.id
 			LEFT JOIN song_genres sg ON sg.song_id = s.id
 			LEFT JOIN genres g ON g.id = sg.genre_id
 			WHERE (%[1]s = '' OR s.status = %[1]s)
 			  AND (%[2]s = '' OR lower(u.name) = lower(%[2]s) OR lower(u.email) = lower(%[2]s))
 			  AND %[4]s
-			GROUP BY s.id, u.name, u.email
+			GROUP BY s.id, u.name, u.email, lp.played_at
 		) song_data
 		ORDER BY %[3]s
 	`, statusParam, addedByParam, orderBy, undigestedClause)
@@ -123,8 +126,8 @@ func ListSongsQuery(ctx context.Context, dbtx db.DBTX, p SongQueryParams) ([]Son
 	for rows.Next() {
 		var s SongRow
 		var addedByName, addedByEmail, genres *string
-		var docCreatedAt, docModifiedAt pgtype.Timestamptz
-		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &docCreatedAt, &docModifiedAt, &s.Slug, &s.HasVersion, &genres); err != nil {
+		var docCreatedAt, docModifiedAt, lastPlayedAt pgtype.Timestamptz
+		if err := rows.Scan(&s.ID, &s.Title, &s.Artist, &s.Status, &addedByName, &addedByEmail, &s.CreatedAt, &s.UpdatedAt, &docCreatedAt, &docModifiedAt, &s.Slug, &lastPlayedAt, &s.HasVersion, &genres); err != nil {
 			return nil, fmt.Errorf("scanning song row: %w", err)
 		}
 		s.AddedByName = deref(addedByName)
@@ -134,6 +137,9 @@ func ListSongsQuery(ctx context.Context, dbtx db.DBTX, p SongQueryParams) ([]Son
 		}
 		if docModifiedAt.Valid {
 			s.DocModifiedAt = &docModifiedAt.Time
+		}
+		if lastPlayedAt.Valid {
+			s.LastPlayedAt = &lastPlayedAt.Time
 		}
 		out = append(out, s)
 	}

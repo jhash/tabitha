@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +44,10 @@ func SongPlayHandler(q *db.Queries) http.HandlerFunc {
 		if !hasVersion {
 			http.Redirect(w, r, songShowHref(song), http.StatusFound)
 			return
+		}
+
+		if err := q.RecordSongPlayed(r.Context(), song.ID); err != nil {
+			log.Printf("song_play: recording last played: %v", err)
 		}
 
 		description := fmt.Sprintf("%s, as performed by %s", song.Title, song.Artist)

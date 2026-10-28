@@ -12,6 +12,7 @@ sql:
       - migrations/0009_source_site.up.sql
       - migrations/0010_song_slugs.up.sql
       - migrations/0011_source_site_constant.up.sql
+      - migrations/0012_song_last_played.up.sql
     queries: internal/db/queries
     engine: postgresql
     gen:

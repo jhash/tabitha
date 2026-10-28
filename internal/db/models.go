@@ -115,6 +115,11 @@ type SongGenre struct {
 	GenreID int64 `json:"genre_id"`
 }
 
+type SongLastPlayed struct {
+	SongID   int64              `json:"song_id"`
+	PlayedAt pgtype.Timestamptz `json:"played_at"`
+}
+
 type TranscriptionVersion struct {
 	ID        int64              `json:"id"`
 	SongID    int64              `json:"song_id"`
