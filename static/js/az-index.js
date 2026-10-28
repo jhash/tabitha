@@ -9,6 +9,16 @@
   let shownIndex = -1;
   let frame = 0;
 
+  function syncHeaderOffset() {
+    const header = document.querySelector(".songs-header-row");
+    const height = header && getComputedStyle(header).position === "sticky" ? header.offsetHeight : 0;
+    document.documentElement.style.setProperty("--sticky-header-height", height + "px");
+  }
+
+  syncHeaderOffset();
+  window.addEventListener("resize", syncHeaderOffset, { passive: true });
+  document.addEventListener("htmx:afterSettle", syncHeaderOffset);
+
   function indexAt(clientY) {
     const i = Math.floor(((clientY - rect.top) / rect.height) * letters.length);
     return Math.max(0, Math.min(letters.length - 1, i));
@@ -46,6 +56,7 @@
     const found = e.target.closest?.(".az-index");
     if (!found || e.button > 0) return;
     e.preventDefault();
+    syncHeaderOffset();
     bar = found;
     rect = bar.getBoundingClientRect();
     letters = Array.from(bar.querySelectorAll(".az-letter"));

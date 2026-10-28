@@ -411,6 +411,10 @@ th a {
   padding-right: 1.75rem;
 }
 
+.songs-header-row:has(~ .az-index) {
+  padding-right: 2.25rem;
+}
+
 tr[id^="az-"] {
   scroll-margin-top: var(--sticky-header-height, 0px);
 }
