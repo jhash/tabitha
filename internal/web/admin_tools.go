@@ -54,6 +54,16 @@ func adminToolsContent(recentJobs []jobs.JobSummary) g.Node {
 			Input(Type("number"), Name("limit"), Value("50")),
 			Button(Type("submit"), g.Text("Digest a batch of undigested songs")),
 		),
+		H2(g.Text("Scraping (Ultimate Guitar / e-chords)")),
+		FormEl(Method("post"), Action("/admin/tools/scrape-song"),
+			Input(Type("text"), Name("title"), Placeholder("Song title (exact match)")),
+			Input(Type("text"), Name("url"), Placeholder("Source URL (optional — defaults to the song's source_url)")),
+			Button(Type("submit"), g.Text("Scrape song")),
+		),
+		FormEl(Method("post"), Action("/admin/tools/publish-song-doc"),
+			Input(Type("text"), Name("title"), Placeholder("Song title (exact match)")),
+			Button(Type("submit"), g.Text("Publish to Google Doc")),
+		),
 		H2(g.Text("Recent jobs")),
 		recentJobsTable(recentJobs),
 		P(A(Href("/admin/jobs"), g.Text("View all jobs →"))),
@@ -109,6 +119,46 @@ func AdminTriggerDigestSongHandler(q *db.Queries, jobClient *river.Client[pgx.Tx
 		}
 		if err := jobs.EnqueueDigestSong(r.Context(), jobClient, song.ID); err != nil {
 			http.Error(w, "failed to enqueue digest", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/tools", http.StatusFound)
+	}
+}
+
+// AdminTriggerScrapeSongHandler enqueues a scrape_song job for one song,
+// looked up by exact (case-insensitive) title match. The url field is
+// optional — when blank, the job falls back to the song's own
+// source_url.
+func AdminTriggerScrapeSongHandler(q *db.Queries, jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		title := r.FormValue("title")
+		song, err := q.GetSongByTitle(r.Context(), title)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if err := jobs.EnqueueScrapeSong(r.Context(), jobClient, song.ID, r.FormValue("url")); err != nil {
+			http.Error(w, "failed to enqueue scrape", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/admin/tools", http.StatusFound)
+	}
+}
+
+// AdminTriggerPublishSongDocHandler enqueues a publish_song_doc job for
+// one song, looked up by exact (case-insensitive) title match — pushes
+// the song's current transcription version up to a Google Doc (creating
+// one the first time), the "up" half of two-way Google Doc sync.
+func AdminTriggerPublishSongDocHandler(q *db.Queries, jobClient *river.Client[pgx.Tx]) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		title := r.FormValue("title")
+		song, err := q.GetSongByTitle(r.Context(), title)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if err := jobs.EnqueuePublishSongDoc(r.Context(), jobClient, song.ID); err != nil {
+			http.Error(w, "failed to enqueue publish", http.StatusInternalServerError)
 			return
 		}
 		http.Redirect(w, r, "/admin/tools", http.StatusFound)

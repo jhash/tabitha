@@ -22,7 +22,9 @@ import (
 //
 // Scopes are explicit: passing any scopes to google.New disables goth's
 // default "email" scope, so "email" and "profile" must be listed alongside
-// the read-only Drive/Docs scope tabitha needs for Jeff's documents.
+// the read-only Drive/Docs scope tabitha needs for Jeff's documents, plus
+// the narrower per-file scope used for publishing new Google Docs (see
+// auth.GoogleDriveFileScope).
 func configureGoogleAuth(cfg config.Config) {
 	if !auth.GoogleConfigured(cfg) {
 		return
@@ -31,7 +33,7 @@ func configureGoogleAuth(cfg config.Config) {
 	gothic.Store = sessions.NewCookieStore([]byte(cfg.SessionSecret))
 
 	callbackURL := cfg.AppURL + "/auth/google/callback"
-	provider := google.New(cfg.GoogleKey, cfg.GoogleSecret, callbackURL, "email", "profile", auth.GoogleDriveReadonlyScope)
+	provider := google.New(cfg.GoogleKey, cfg.GoogleSecret, callbackURL, "email", "profile", auth.GoogleDriveReadonlyScope, auth.GoogleDriveFileScope)
 	// Google only returns a refresh_token when access_type=offline and
 	// prompt=consent are both explicit on the auth URL — otherwise a
 	// returning user's re-login silently omits it, and the stored token

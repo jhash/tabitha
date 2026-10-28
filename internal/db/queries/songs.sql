@@ -20,6 +20,11 @@ RETURNING *;
 -- name: SetSongGoogleDocID :exec
 UPDATE songs SET google_doc_id = $2, updated_at = now() WHERE id = $1;
 
+-- name: SetSongSourceURL :exec
+-- Backfills source_url for a song that was created without one (e.g.
+-- manually via /songs/new) and then scraped by URL directly.
+UPDATE songs SET source_url = $2, updated_at = now() WHERE id = $1;
+
 -- name: SetSongCurrentVersion :exec
 UPDATE songs SET current_version_id = $2, updated_at = now() WHERE id = $1;
 
